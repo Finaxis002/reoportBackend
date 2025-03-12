@@ -9,12 +9,16 @@ const Notification = require("./models/Notification");
 require("dotenv").config();
 const { v4: uuidv4 } = require("uuid"); // ✅ Correct import
 const multer = require("multer");
+const PDFDocument = require("pdfkit");
+const fs = require("fs");
 const path = require("path");
+
 const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const Admin = require("./models/Admin");
+
 
 const app = express();
 
@@ -24,9 +28,6 @@ app.use(express.urlencoded({ extended: true }));
 // app.use(cors({ origin: "http://localhost:3000" }));
 // (Note: express.json() is built-in so you don't need bodyParser.json())
 
-app.use(bodyParser.json());
-
-let storedOTP = null;
 app.use(cors());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -49,6 +50,7 @@ mongoose
   )
   .then(() => console.log("MongoDB Atlas connected"))
   .catch((err) => console.error("Error connecting to MongoDB Atlas:", err));
+
 
 // JWT token authentication
 const JWT_SECRET = process.env.JWT_SECRET; // Get from .env
@@ -107,17 +109,23 @@ app.post("/verify-otp", (req, res) => {
    User Schema & Endpoints
    ============================ */
 
+
 // Define Schema
-const formSchema = new mongoose.Schema({
-  sessionId: { type: String, required: true, unique: true },
-  AccountInformation: Object,
-  MeansOfFinance: Object,
-  CostOfProject: Object,
-  ProjectReportSetting: Object,
-  Expenses: Object,
-  Revenue: Object,
-  MoreDetails: Object,
-});
+const formSchema = new mongoose.Schema(
+  {
+    sessionId: { type: String, required: true, unique: true },
+    AccountInformation: Object,
+    MeansOfFinance: Object,
+    CostOfProject: Object,
+    ProjectReportSetting: Object,
+    Expenses: Object,
+    Revenue: Object,
+    MoreDetails: Object,
+    generatedPDF: Object,
+    createdAt: { type: Date, default: Date.now }, // ✅ Add createdAt field
+  },
+  { timestamps: true }
+);
 const FormData = mongoose.model("FormData", formSchema);
 
 // Configure Storage
@@ -169,6 +177,7 @@ app.post("/save-step", upload.single("file"), async (req, res) => {
       console.log("📂 File Uploaded:", req.file);
       updateData.AccountInformation.logoOfBusiness = `/uploads/${req.file.filename}`;
     }
+
 
     if (!sessionId || sessionId === "undefined") {
       // 🛑 Step 1 - Check if document already exists before creating a new one
@@ -236,11 +245,23 @@ app.post(
     try {
       console.log("🔹 Incoming Request:", req.body);
 
+
+
+
+app.post(
+  "/create-new-from-existing",
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      console.log(
+        "🔹 Incoming Request to /create-new-from-existing:",
+        req.body
+      );
+
       if (!req.body.data) {
-        console.error("❌ Missing 'data' in request body");
         return res
           .status(400)
-          .json({ message: "Missing 'data' in request body" });
+          .json({ message: "Missing data in request body" });
       }
 
       let newData;
@@ -253,49 +274,62 @@ app.post(
           .json({ message: "Invalid JSON format", error: jsonError.message });
       }
 
-      console.log("📌 Parsed Data:", newData);
+      console.log("📌 Parsed Data Before File Processing:", newData);
 
-      // ✅ Remove `_id` from newData before updating
-      if (newData._id) {
-        console.log("🗑 Removing _id before updating:", newData._id);
-        delete newData._id;
+      // ✅ Ensure `AccountInformation` exists
+      if (!newData.AccountInformation) {
+        newData.AccountInformation = {};
       }
 
-      if (!newData.sessionId) {
-        console.log("🆕 Creating a New Document...");
-        const newSessionId = uuidv4();
-        newData.sessionId = newSessionId;
+      // ✅ Handle file upload
+      if (req.file) {
+        console.log("📂 File Uploaded:", req.file);
+        newData.AccountInformation.logoOfBusiness = `/uploads/${req.file.filename}`;
+      }
 
-        const newForm = await FormData.create(newData);
-        console.log("✅ New Document Created:", newSessionId);
+      let sessionToUse = newData.sessionId;
 
-        return res.status(201).json({
-          message: "New report created successfully",
-          sessionId: newSessionId,
-        });
-      } else {
-        console.log("🔄 Updating Existing Document:", newData.sessionId);
+      if (sessionToUse) {
+        // ✅ If sessionId exists, update the existing document
+        console.log(
+          "🔄 Updating existing document for sessionId:",
+          sessionToUse
+        );
 
         const updatedForm = await FormData.findOneAndUpdate(
-          { sessionId: newData.sessionId }, // Find by sessionId
-          { $set: newData }, // ✅ Update only safe fields (without _id)
-          { new: true }
+          { sessionId: sessionToUse },
+          { $set: newData },
+          { new: true, upsert: false }
         );
 
         if (!updatedForm) {
-          console.error("❌ Document Not Found for Update");
-          return res.status(404).json({ message: "Document not found" });
+          return res.status(404).json({ message: "Session ID not found" });
         }
 
-        console.log("✅ Document Updated:", updatedForm.sessionId);
-
         return res.status(200).json({
-          message: "Report updated successfully",
-          sessionId: updatedForm.sessionId,
+          message: "Data updated successfully",
+          sessionId: sessionToUse,
+          filePath: newData.AccountInformation.logoOfBusiness || null,
         });
       }
+
+      // ✅ If no sessionId, create a new document (only for Step 1)
+      const newSessionId = uuidv4();
+      console.log("🆕 Creating a New Report with sessionId:", newSessionId);
+
+      const newForm = new FormData({ sessionId: newSessionId, ...newData });
+
+      await newForm.save();
+      console.log("✅ New Document Saved Successfully:", newSessionId);
+
+      return res.status(201).json({
+        message: "New report created successfully",
+        sessionId: newSessionId, // ✅ Return sessionId so frontend can store it
+        filePath: newData.AccountInformation.logoOfBusiness || null,
+      });
     } catch (error) {
-      console.error("🔥 Server Error:", error);
+      console.error("🔥 Error in /create-new-from-existing API:", error);
+
       return res
         .status(500)
         .json({ message: "Internal Server Error", error: error.message });
@@ -394,6 +428,7 @@ app.post("/update-step", async (req, res) => {
   }
 });
 
+
 // app.get("/api/clients", async (req, res) => {
 //   try {
 //     // Fetch only client names from AccountInformation field
@@ -416,6 +451,7 @@ app.post("/update-step", async (req, res) => {
 
 // Get business names by client name
 
+
 app.get("/api/clients", async (req, res) => {
   try {
     // Fetch only client names from AccountInformation field
@@ -437,6 +473,7 @@ app.get("/api/clients", async (req, res) => {
 });
 
 app.get("/api/businesses", async (req, res) => {
+
   try {
     // Fetch all business names along with their client names
     const businesses = await FormData.find(
@@ -496,17 +533,22 @@ app.get("/api/businesses/:clientName", async (req, res) => {
       return res
         .status(404)
         .json({ message: `No businesses found for client: '${clientName}'` });
+
     }
 
-    const businessNames = businesses
-      .map((business) => business.AccountInformation?.businessName)
-      .filter((name) => name);
+    // Format the result as "BusinessName (ClientName)"
+    const formattedBusinessNames = businesses
+      .map(({ AccountInformation }) => {
+        const clientName = AccountInformation?.clientName || "Unknown Client";
+        const businessName =
+          AccountInformation?.businessName || "Unknown Business";
+        return `${businessName} (${clientName})`;
+      })
+      .filter((entry) => entry !== "Unknown Business (Unknown Client)"); // Remove empty entries
 
-    console.log(" Found Business Names:", businessNames);
-
-    res.status(200).json({ businessNames });
+    res.status(200).json({ businesses: formattedBusinessNames });
   } catch (error) {
-    console.error(" Error fetching business names:", error);
+    console.error("Error fetching businesses:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
@@ -686,6 +728,26 @@ app.put("/api/employees/:employeeId", async (req, res) => {
   }
 });
 
+
+
+//fetch employee permissions
+// GET Endpoint to fetch employee permissions
+app.get("/api/employee/permissions/:employeeId", async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const employee = await Employee.findOne({ employeeId });
+
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    res.status(200).json({ permissions: employee.permissions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // POST endpoint to create a task
 app.post("/api/tasks", async (req, res) => {
   try {
@@ -789,6 +851,7 @@ app.post("/api/mark-notification-read", async (req, res) => {
     res.status(500).json({ success: false, message: "Error updating status" });
   }
 });
+
 
 
 //Admin Api's
@@ -980,6 +1043,7 @@ const protectAdmin = (req, res, next) => {
 
 
 
+
 app.get("/get-report", async (req, res) => {
   try {
     const { sessionId } = req.query;
@@ -991,6 +1055,7 @@ app.get("/get-report", async (req, res) => {
 
       if (!report) {
         console.log(`❌ Report not found for sessionId: ${sessionId}`);
+
         return res.status(404).json({
           success: false,
           message: "Report not found",
@@ -1002,6 +1067,7 @@ app.get("/get-report", async (req, res) => {
         success: true,
         data: report,
       });
+
     } else {
       console.log("🔎 Fetching all reports...");
 
@@ -1009,6 +1075,7 @@ app.get("/get-report", async (req, res) => {
 
       if (!reports.length) {
         console.log("❌ No reports found");
+
         return res.status(404).json({
           success: false,
           message: "No reports found",
@@ -1034,6 +1101,7 @@ app.get("/get-report", async (req, res) => {
 
 
 
+
 app.get("/get-report-data/:sessionId", async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -1056,8 +1124,6 @@ app.get("/get-report-data/:sessionId", async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 });
-
-
 
 
 /* ============================
