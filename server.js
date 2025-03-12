@@ -13,6 +13,13 @@ const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 
+const bodyParser = require("body-parser");
+const nodemailer = require("nodemailer");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const Admin = require("./models/Admin");
+
+
 const app = express();
 
 // Middleware
@@ -22,6 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 // (Note: express.json() is built-in so you don't need bodyParser.json())
 
 app.use(cors());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ✅ Debug: Print the environment variable
 console.log("🔍 MongoDB URI:", process.env.MONGODB_URI);
@@ -43,6 +51,65 @@ mongoose
   .then(() => console.log("MongoDB Atlas connected"))
   .catch((err) => console.error("Error connecting to MongoDB Atlas:", err));
 
+
+// JWT token authentication
+const JWT_SECRET = process.env.JWT_SECRET; // Get from .env
+
+// ✅ Configure Nodemailer to send emails
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.ADMIN_EMAIL, // Admin email
+    pass: process.env.ADMIN_EMAIL_PASSWORD, // App password
+  },
+});
+
+// ✅ Generate and Send OTP to Admin
+app.post("/send-otp", async (req, res) => {
+  const otp = Math.floor(100000 + Math.random() * 900000); // Generate 6-digit OTP
+  storedOTP = otp;
+
+  const mailOptions = {
+    from: process.env.ADMIN_EMAIL,
+    to: process.env.ADMIN_EMAIL, // Admin will receive OTP
+    subject: "Employee OTP Verification",
+    text: `Your OTP for PDF access is: ${otp}`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true, message: "OTP sent successfully!" });
+  } catch (error) {
+    console.error("Error sending email:", error);
+    res.status(500).json({ success: false, message: "Failed to send OTP" });
+  }
+});
+
+// ✅ Verify OTP
+app.post("/verify-otp", (req, res) => {
+  const { otp } = req.body;
+  if (parseInt(otp) === storedOTP) {
+    res.json({ success: true, message: "OTP verified!" });
+    storedOTP = null; // Reset OTP after successful verification
+  } else {
+    res.status(400).json({ success: false, message: "Invalid OTP!" });
+  }
+});
+
+// Connect to MongoDB
+// mongoose
+//   .connect("mongodb://127.0.0.1:27017/test", {
+//     useNewUrlParser: true,
+//     useUnifiedTopology: true,
+//   })
+//   .then(() => console.log("MongoDB connected"))
+//   .catch((err) => console.error("Error connecting to MongoDB:", err));
+
+/* ============================
+   User Schema & Endpoints
+   ============================ */
+
+
 // Define Schema
 const formSchema = new mongoose.Schema(
   {
@@ -60,7 +127,6 @@ const formSchema = new mongoose.Schema(
   { timestamps: true }
 );
 const FormData = mongoose.model("FormData", formSchema);
-
 
 // Configure Storage
 const storage = multer.diskStorage({
@@ -111,6 +177,7 @@ app.post("/save-step", upload.single("file"), async (req, res) => {
       console.log("📂 File Uploaded:", req.file);
       updateData.AccountInformation.logoOfBusiness = `/uploads/${req.file.filename}`;
     }
+
 
     if (!sessionId || sessionId === "undefined") {
       // 🛑 Step 1 - Check if document already exists before creating a new one
@@ -170,6 +237,13 @@ app.post("/save-step", upload.single("file"), async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 });
+
+app.post(
+  "/create-new-from-existing",
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      console.log("🔹 Incoming Request:", req.body);
 
 
 
@@ -255,6 +329,7 @@ app.post(
       });
     } catch (error) {
       console.error("🔥 Error in /create-new-from-existing API:", error);
+
       return res
         .status(500)
         .json({ message: "Internal Server Error", error: error.message });
@@ -353,6 +428,30 @@ app.post("/update-step", async (req, res) => {
   }
 });
 
+
+// app.get("/api/clients", async (req, res) => {
+//   try {
+//     // Fetch only client names from AccountInformation field
+//     const clients = await FormData.find(
+//       {},
+//       { "AccountInformation.clientName": 1, _id: 0 }
+//     );
+
+//     // Extract only client names into an array
+//     const clientNames = clients
+//       .map((client) => client.AccountInformation?.clientName)
+//       .filter((name) => name); // Filter out any null or undefined values
+
+//     res.status(200).json({ clientNames });
+//   } catch (error) {
+//     console.error("Error fetching client names:", error);
+//     res.status(500).json({ message: "Internal Server Error" });
+//   }
+// });
+
+// Get business names by client name
+
+
 app.get("/api/clients", async (req, res) => {
   try {
     // Fetch only client names from AccountInformation field
@@ -374,6 +473,7 @@ app.get("/api/clients", async (req, res) => {
 });
 
 app.get("/api/businesses", async (req, res) => {
+
   try {
     // Fetch all business names along with their client names
     const businesses = await FormData.find(
@@ -387,6 +487,53 @@ app.get("/api/businesses", async (req, res) => {
 
     if (!businesses.length) {
       return res.status(404).json({ message: "No businesses found" });
+    }
+
+    // Format the result as "BusinessName (ClientName)"
+    const formattedBusinessNames = businesses
+      .map(({ AccountInformation }) => {
+        const clientName = AccountInformation?.clientName || "Unknown Client";
+        const businessName =
+          AccountInformation?.businessName || "Unknown Business";
+        return `${businessName} (${clientName})`;
+      })
+      .filter((entry) => entry !== "Unknown Business (Unknown Client)"); // Remove empty entries
+
+    res.status(200).json({ businesses: formattedBusinessNames });
+  } catch (error) {
+    console.error("Error fetching businesses:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+app.get("/api/businesses/:clientName", async (req, res) => {
+  try {
+    const clientName = req.params.clientName.trim(); // Remove any extra spaces
+
+    console.log(
+      "\n Received clientName from request:",
+      JSON.stringify(clientName)
+    );
+
+    // Use regex without strict start and end anchors to allow matching with spaces
+    const businesses = await FormData.find(
+      {
+        "AccountInformation.clientName": { $regex: clientName, $options: "i" },
+      },
+      { "AccountInformation.businessName": 1, _id: 0 }
+    );
+
+    console.log(
+      "🔍 Query sent to MongoDB:",
+      JSON.stringify(businesses, null, 2)
+    );
+
+    if (!businesses.length) {
+      console.log(" No businesses found for client:", clientName);
+      return res
+        .status(404)
+        .json({ message: `No businesses found for client: '${clientName}'` });
+
     }
 
     // Format the result as "BusinessName (ClientName)"
@@ -501,6 +648,7 @@ app.get("/api/employees", async (req, res) => {
   }
 });
 
+
 // DELETE endpoint to remove an employee by employeeId
 app.delete("/api/employees/:employeeId", async (req, res) => {
   try {
@@ -538,6 +686,7 @@ app.put("/api/employees/:employeeId", async (req, res) => {
   }
 });
 
+
 /* ============================
    Fetch Employee on Employee Dashboard
    ============================ */
@@ -555,6 +704,8 @@ app.get("/api/employees/:employeeId", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 
 // PUT endpoint to update an employee by employeeId
 app.put("/api/employees/:employeeId", async (req, res) => {
@@ -649,6 +800,27 @@ app.get("/api/tasks", async (req, res) => {
   }
 });
 
+app.put("/api/tasks/:taskId", async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { status } = req.body;
+    const updatedTask = await Task.findByIdAndUpdate(
+      taskId,
+      { status },
+      { new: true }
+    );
+
+    if (!updatedTask) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    res.status(200).json(updatedTask);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // GET endpoint to retrieve notifications for a particular employee
 app.get("/api/notifications", async (req, res) => {
   try {
@@ -680,6 +852,198 @@ app.post("/api/mark-notification-read", async (req, res) => {
   }
 });
 
+
+
+//Admin Api's
+
+app.post('/api/admin/register', upload.single('caSign'), async (req, res) => {
+  const { username, password, roles } = req.body;
+  const caSign = req.file ? `/uploads/${req.file.filename}` : null; // Save file path
+
+  try {
+    // Check if admin already exists
+    const existingAdmin = await Admin.findOne({ username });
+    if (existingAdmin) {
+      return res.status(400).json({ message: 'Admin already exists' });
+    }
+
+    // Create new admin
+    const admin = new Admin({
+      username,
+      password,
+      caSign,
+      roles: JSON.parse(roles), 
+    });
+
+    await admin.save();
+
+    // Generate JWT token
+    const token = jwt.sign({ id: admin._id, username: admin.username }, JWT_SECRET, {
+      expiresIn: '1h'
+    });
+
+    res.status(201).json({ message: 'Admin registered successfully', token });
+  } catch (error) {
+    console.error('Error registering admin:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// Admin login Route
+app.post('/api/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const admin = await Admin.findOne({ username });
+    if (!admin) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    const isMatch = await admin.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ id: admin._id, username: admin.username }, JWT_SECRET, {
+      expiresIn: '1h'
+    });
+
+    res.status(200).json({ token,
+       message: 'Login successful',
+       username: admin.username 
+       });
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+//fetch all admin names
+app.get('/api/admins', async (req, res) => {
+  try {
+    const admins = await Admin.find({}, 'username caSign roles');
+    res.status(200).json(admins);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching admins' });
+  }
+});
+
+// Delete Admin by ID
+app.delete('/api/admin/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const deletedAdmin = await Admin.findByIdAndDelete(id);
+    if (!deletedAdmin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    res.status(200).json({ message: 'Admin deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting admin:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// Edit Admin by ID
+// app.put('/api/admin/:id', async (req, res) => {
+//   const { id } = req.params;
+//   const { username, password, roles } = req.body;
+
+//   try {
+//     const admin = await Admin.findById(id);
+//     if (!admin) {
+//       return res.status(404).json({ message: 'Admin not found' });
+//     }
+
+//     if (username) admin.username = username;
+//     if (password) {
+//       const salt = await bcrypt.genSalt(10);
+//       admin.password = await bcrypt.hash(password, salt);
+//     }
+//     // ✅ Update roles
+//     if (roles) {
+//       admin.roles = JSON.parse(roles);
+//     }
+
+
+//     await admin.save();
+
+//     res.status(200).json({ message: 'Admin updated successfully' });
+//   } catch (error) {
+//     console.error('Error updating admin:', error);
+//     res.status(500).json({ message: 'Internal Server Error' });
+//   }
+// });
+app.put('/api/admin/:id', upload.single('caSign'), async (req, res) => {
+  const { id } = req.params;
+  const { username, password, roles } = req.body;
+  
+  try {
+    const admin = await Admin.findById(id);
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    if (username) admin.username = username;
+    
+    // ✅ Update password if provided
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      admin.password = await bcrypt.hash(password, salt);
+    }
+
+    // ✅ Update CA Sign (file upload)
+    if (req.file) {
+      admin.caSign = `/uploads/${req.file.filename}`;
+    }
+
+    // ✅ Update roles
+    if (roles) {
+      admin.roles = JSON.parse(roles);
+    }
+
+    await admin.save();
+
+    res.status(200).json({ message: 'Admin updated successfully' });
+  } catch (error) {
+    console.error('Error updating admin:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+// Add a middleware
+const protectAdmin = (req, res, next) => {
+  let token;
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({ message: "Not authorized, token missing" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.admin = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ message: "Not authorized, invalid token" });
+  }
+};
+
+
+
+
+
+
+
 app.get("/get-report", async (req, res) => {
   try {
     const { sessionId } = req.query;
@@ -691,11 +1055,19 @@ app.get("/get-report", async (req, res) => {
 
       if (!report) {
         console.log(`❌ Report not found for sessionId: ${sessionId}`);
-        return res.status(404).json({ message: "Report not found" });
+
+        return res.status(404).json({
+          success: false,
+          message: "Report not found",
+        });
       }
 
       console.log("✅ Report fetched successfully:", report);
-      return res.status(200).json(report);
+      return res.status(200).json({
+        success: true,
+        data: report,
+      });
+
     } else {
       console.log("🔎 Fetching all reports...");
 
@@ -703,19 +1075,32 @@ app.get("/get-report", async (req, res) => {
 
       if (!reports.length) {
         console.log("❌ No reports found");
-        return res.status(404).json({ message: "No reports found" });
+
+        return res.status(404).json({
+          success: false,
+          message: "No reports found",
+        });
       }
 
       console.log(`✅ Fetched ${reports.length} reports`);
-      return res.status(200).json(reports);
+      return res.status(200).json({
+        success: true,
+        totalReports: reports.length,
+        data: reports,
+      });
     }
   } catch (error) {
     console.error("🔥 Error in /get-report API:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 });
+
+
+
 
 app.get("/get-report-data/:sessionId", async (req, res) => {
   try {
@@ -739,6 +1124,7 @@ app.get("/get-report-data/:sessionId", async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 });
+
 
 /* ============================
    Start the Server
