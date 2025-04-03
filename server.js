@@ -9,27 +9,88 @@ const Notification = require("./models/Notification");
 require("dotenv").config();
 const { v4: uuidv4 } = require("uuid"); // ✅ Correct import
 const multer = require("multer");
-const PDFDocument = require("pdfkit");
-const fs = require("fs");
 const path = require("path");
-
-const bodyParser = require("body-parser");
-const nodemailer = require("nodemailer");
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const Admin = require("./models/Admin");
-
+const moment = require("moment");
+// const adminRoutes = require('./routes/adminRoutes')
+const FormData = require("./models/formdatas");
+const bankRoutes = require("./routes/bankRoutes");
+const clientRoutes = require("./routes/clientRoute");
+const formdatasRoutes = require("./routes/formdatasRoute");
+const otpRoutes = require("./routes/otpRoutes"); // Adjust path if needed
+const axios = require("axios");
+const connectDB = require("./config/db");
+const http = require('http');
+const { Server } = require("socket.io");
 
 const app = express();
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// app.use('/api/admin', adminRoutes)
 // app.use(cors({ origin: "http://localhost:3000" }));
 // (Note: express.json() is built-in so you don't need bodyParser.json())
 
 app.use(cors());
+
+// Or more securely:
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://frontend-dashboard-liart.vercel.app", // ✅ Add this
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
+
+app.use(cors());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Serve static files from the uploads folder
+// ✅ Use Routes
+app.use("/api", bankRoutes);
+
+app.use("/api/clients", clientRoutes);
+
+app.use("/api", formdatasRoutes);
+
+app.use("/api", otpRoutes);
+
+
+
+// 🔁 4. Create HTTP server and bind Socket.IO
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:3000",
+      "https://frontend-dashboard-liart.vercel.app/"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("🟢 A user connected: ", socket.id);
+
+  // ✅ Join specific room based on employeeId
+  socket.on("join", (employeeId) => {
+    console.log(`🔔 Employee ${employeeId} joined notifications room`);
+    socket.join(employeeId);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("🔴 A user disconnected:", socket.id);
+  });
+});
+
 
 // ✅ Debug: Print the environment variable
 console.log("🔍 MongoDB URI:", process.env.MONGODB_URI);
@@ -39,94 +100,20 @@ if (!process.env.MONGODB_URI) {
   process.exit(1); // Stop the server if no DB URI is found
 }
 
-// ✅ Connect to MongoDB with updated URI
-mongoose
-  .connect(
-    "mongodb+srv://finaxis-user-31:RK8%28ha7Haa7%23jU%25@cluster0.ykhfs.mongodb.net/test?retryWrites=true&w=majority",
-    {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    }
-  )
-  .then(() => console.log("MongoDB Atlas connected"))
-  .catch((err) => console.error("Error connecting to MongoDB Atlas:", err));
-
+connectDB();
+// mongoose
+//   .connect(
+//     "mongodb+srv://finaxis-user-31:RK8%28ha7Haa7%23jU%25@cluster0.ykhfs.mongodb.net/test?retryWrites=true&w=majority",
+//     {
+//       useNewUrlParser: true,
+//       useUnifiedTopology: true,
+//     }
+//   )
+//   .then(() => console.log("MongoDB Atlas connected"))
+//   .catch((err) => console.error("Error connecting to MongoDB Atlas:", err));
 
 // JWT token authentication
 const JWT_SECRET = process.env.JWT_SECRET; // Get from .env
-
-// ✅ Configure Nodemailer to send emails
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.ADMIN_EMAIL, // Admin email
-    pass: process.env.ADMIN_EMAIL_PASSWORD, // App password
-  },
-});
-
-// ✅ Generate and Send OTP to Admin
-app.post("/send-otp", async (req, res) => {
-  const otp = Math.floor(100000 + Math.random() * 900000); // Generate 6-digit OTP
-  storedOTP = otp;
-
-  const mailOptions = {
-    from: process.env.ADMIN_EMAIL,
-    to: process.env.ADMIN_EMAIL, // Admin will receive OTP
-    subject: "Employee OTP Verification",
-    text: `Your OTP for PDF access is: ${otp}`,
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    res.json({ success: true, message: "OTP sent successfully!" });
-  } catch (error) {
-    console.error("Error sending email:", error);
-    res.status(500).json({ success: false, message: "Failed to send OTP" });
-  }
-});
-
-// ✅ Verify OTP
-app.post("/verify-otp", (req, res) => {
-  const { otp } = req.body;
-  if (parseInt(otp) === storedOTP) {
-    res.json({ success: true, message: "OTP verified!" });
-    storedOTP = null; // Reset OTP after successful verification
-  } else {
-    res.status(400).json({ success: false, message: "Invalid OTP!" });
-  }
-});
-
-// Connect to MongoDB
-// mongoose
-//   .connect("mongodb://127.0.0.1:27017/test", {
-//     useNewUrlParser: true,
-//     useUnifiedTopology: true,
-//   })
-//   .then(() => console.log("MongoDB connected"))
-//   .catch((err) => console.error("Error connecting to MongoDB:", err));
-
-/* ============================
-   User Schema & Endpoints
-   ============================ */
-
-
-// Define Schema
-const formSchema = new mongoose.Schema(
-  {
-    sessionId: { type: String, required: true, unique: true },
-    AccountInformation: Object,
-    MeansOfFinance: Object,
-    CostOfProject: Object,
-    ProjectReportSetting: Object,
-    Expenses: Object,
-    Revenue: Object,
-    MoreDetails: Object,
-    generatedPDF: Object,
-    createdAt: { type: Date, default: Date.now }, // ✅ Add createdAt field
-  },
-  { timestamps: true }
-);
-const FormData = mongoose.model("FormData", formSchema);
 
 // Configure Storage
 const storage = multer.diskStorage({
@@ -150,6 +137,7 @@ const fileFilter = (req, file, cb) => {
 
 // Set up Multer middleware
 const upload = multer({ storage, fileFilter });
+// const upload = multer({ storage }).single('caSign');
 
 app.post("/save-step", upload.single("file"), async (req, res) => {
   try {
@@ -177,7 +165,6 @@ app.post("/save-step", upload.single("file"), async (req, res) => {
       console.log("📂 File Uploaded:", req.file);
       updateData.AccountInformation.logoOfBusiness = `/uploads/${req.file.filename}`;
     }
-
 
     if (!sessionId || sessionId === "undefined") {
       // 🛑 Step 1 - Check if document already exists before creating a new one
@@ -237,16 +224,6 @@ app.post("/save-step", upload.single("file"), async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 });
-
-app.post(
-  "/create-new-from-existing",
-  upload.single("file"),
-  async (req, res) => {
-    try {
-      console.log("🔹 Incoming Request:", req.body);
-
-
-
 
 app.post(
   "/create-new-from-existing",
@@ -329,7 +306,6 @@ app.post(
       });
     } catch (error) {
       console.error("🔥 Error in /create-new-from-existing API:", error);
-
       return res
         .status(500)
         .json({ message: "Internal Server Error", error: error.message });
@@ -428,30 +404,6 @@ app.post("/update-step", async (req, res) => {
   }
 });
 
-
-// app.get("/api/clients", async (req, res) => {
-//   try {
-//     // Fetch only client names from AccountInformation field
-//     const clients = await FormData.find(
-//       {},
-//       { "AccountInformation.clientName": 1, _id: 0 }
-//     );
-
-//     // Extract only client names into an array
-//     const clientNames = clients
-//       .map((client) => client.AccountInformation?.clientName)
-//       .filter((name) => name); // Filter out any null or undefined values
-
-//     res.status(200).json({ clientNames });
-//   } catch (error) {
-//     console.error("Error fetching client names:", error);
-//     res.status(500).json({ message: "Internal Server Error" });
-//   }
-// });
-
-// Get business names by client name
-
-
 app.get("/api/clients", async (req, res) => {
   try {
     // Fetch only client names from AccountInformation field
@@ -473,7 +425,6 @@ app.get("/api/clients", async (req, res) => {
 });
 
 app.get("/api/businesses", async (req, res) => {
-
   try {
     // Fetch all business names along with their client names
     const businesses = await FormData.find(
@@ -487,53 +438,6 @@ app.get("/api/businesses", async (req, res) => {
 
     if (!businesses.length) {
       return res.status(404).json({ message: "No businesses found" });
-    }
-
-    // Format the result as "BusinessName (ClientName)"
-    const formattedBusinessNames = businesses
-      .map(({ AccountInformation }) => {
-        const clientName = AccountInformation?.clientName || "Unknown Client";
-        const businessName =
-          AccountInformation?.businessName || "Unknown Business";
-        return `${businessName} (${clientName})`;
-      })
-      .filter((entry) => entry !== "Unknown Business (Unknown Client)"); // Remove empty entries
-
-    res.status(200).json({ businesses: formattedBusinessNames });
-  } catch (error) {
-    console.error("Error fetching businesses:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-app.get("/api/businesses/:clientName", async (req, res) => {
-  try {
-    const clientName = req.params.clientName.trim(); // Remove any extra spaces
-
-    console.log(
-      "\n Received clientName from request:",
-      JSON.stringify(clientName)
-    );
-
-    // Use regex without strict start and end anchors to allow matching with spaces
-    const businesses = await FormData.find(
-      {
-        "AccountInformation.clientName": { $regex: clientName, $options: "i" },
-      },
-      { "AccountInformation.businessName": 1, _id: 0 }
-    );
-
-    console.log(
-      "🔍 Query sent to MongoDB:",
-      JSON.stringify(businesses, null, 2)
-    );
-
-    if (!businesses.length) {
-      console.log(" No businesses found for client:", clientName);
-      return res
-        .status(404)
-        .json({ message: `No businesses found for client: '${clientName}'` });
-
     }
 
     // Format the result as "BusinessName (ClientName)"
@@ -573,70 +477,97 @@ const EmployeeSchema = new mongoose.Schema(
     designation: { type: String, required: true },
     password: { type: String, required: true }, // In production, store a hashed password!
     permissions: {
-      createReport: { type: Boolean, default: false },
+      generateReport: { type: Boolean, default: false },
       updateReport: { type: Boolean, default: false },
       createNewWithExisting: { type: Boolean, default: false },
       downloadPDF: { type: Boolean, default: false },
+      exportData: { type: Boolean, default: false },
+    },
+    // In your Mongoose schema
+    isLoggedIn: {
+      type: Boolean,
+      default: false,
     },
   },
   {
     collection: "employees", // Use a separate collection for employees
   }
 );
-
 // Create Employee Model
 const Employee = mongoose.model("Employee", EmployeeSchema);
 
-// Endpoint to register (create) a new employee
 app.post("/api/employees/register", async (req, res) => {
-  try {
-    const { employeeId, name, email, designation, password } = req.body;
+  const { employeeId, name, email, designation, password, permissions } =
+    req.body;
 
-    // Create a new employee document
-    const newEmployee = new Employee({
+  if (!employeeId || !name || !email || !designation || !password) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const newEmployee = await Employee.create({
       employeeId,
       name,
       email,
       designation,
-      password, // Remember: hash the password in a real app!
-      permissions: {
-        createReport: permissions?.createReport || false,
-        updateReport: permissions?.updateReport || false,
-        createNewWithExisting: permissions?.createNewWithExisting || false,
-        downloadPDF: permissions?.downloadPDF || false,
-      },
+      password,
+      permissions,
     });
-
-    // Save to MongoDB
-    await newEmployee.save();
-
-    res.status(201).json({
-      message: "Employee registered successfully",
-      employee: newEmployee,
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(201).json(newEmployee);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create employee" });
   }
 });
 
 // Endpoint to login an employee
 app.post("/api/employees/login", async (req, res) => {
-  try {
-    const { employeeId, password } = req.body;
+  const { employeeId, password } = req.body;
 
-    // Find the employee with matching credentials
-    const employee = await Employee.findOne({ employeeId, password });
+  try {
+    const employee = await Employee.findOne({ employeeId });
 
     if (!employee) {
-      return res.status(401).json({ error: "Invalid employee credentials" });
+      return res.status(401).json({ success: false, error: "Invalid ID" });
     }
 
-    // In a real application, you might generate and return a JWT token here
-    res.json({ success: true, employee });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (employee.password !== password) {
+      return res.status(401).json({ success: false, error: "Invalid Password" });
+    }
+
+    if (employee.sessionToken) {
+      return res.status(403).json({
+        success: false,
+        error: "You're already logged in from another device.",
+      });
+    }
+
+    const sessionToken = uuidv4(); // Generate unique session
+    employee.sessionToken = sessionToken;
+    await employee.save();
+
+    return res.json({ success: true, employee, sessionToken });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
+
+app.post("/api/employees/logout", async (req, res) => {
+  const { employeeId } = req.body;
+
+  try {
+    const employee = await Employee.findOne({ employeeId });
+    if (employee) {
+      employee.sessionToken = null;
+      await employee.save();
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
+
 
 // Endpoint to get all employees
 app.get("/api/employees", async (req, res) => {
@@ -647,7 +578,6 @@ app.get("/api/employees", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // DELETE endpoint to remove an employee by employeeId
 app.delete("/api/employees/:employeeId", async (req, res) => {
@@ -686,7 +616,6 @@ app.put("/api/employees/:employeeId", async (req, res) => {
   }
 });
 
-
 /* ============================
    Fetch Employee on Employee Dashboard
    ============================ */
@@ -704,8 +633,6 @@ app.get("/api/employees/:employeeId", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 // PUT endpoint to update an employee by employeeId
 app.put("/api/employees/:employeeId", async (req, res) => {
@@ -728,30 +655,17 @@ app.put("/api/employees/:employeeId", async (req, res) => {
   }
 });
 
-
-
-//fetch employee permissions
-// GET Endpoint to fetch employee permissions
-app.get("/api/employee/permissions/:employeeId", async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-    const employee = await Employee.findOne({ employeeId });
-
-    if (!employee) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
-
-    res.status(200).json({ permissions: employee.permissions });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// POST endpoint to create a task
 app.post("/api/tasks", async (req, res) => {
   try {
     const { employeeId, taskTitle, taskDescription, dueDate } = req.body;
+
+    const employee = await Employee.findOne({ employeeId });
+    if (!employee) {
+      console.error(`❌ Employee not found with ID: ${employeeId}`);
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    // ✅ Create the task
     const newTask = new Task({
       employeeId,
       taskTitle,
@@ -759,27 +673,54 @@ app.post("/api/tasks", async (req, res) => {
       dueDate,
       createdAt: new Date(),
     });
+
     await newTask.save();
 
-    // Create a notification for the assigned employee.
-    const newNotification = new Notification({
+    const formattedDate = moment(newTask.createdAt).format("DD-MM-YYYY");
+
+    // ✅ Create an Admin Notification
+    const adminNotification = new Notification({
       employeeId,
-      message: `You have been assigned a new task: ${taskTitle}`,
+      taskId: newTask._id,
+      message: ` You assigned a new task "${taskTitle}" to ${employee.name} on ${formattedDate}.`,
+      employeeName: employee.name,
+      type: "admin",
       createdAt: new Date(),
       read: false,
     });
-    await newNotification.save();
+
+    await adminNotification.save();
+
+    // ✅ Create an Employee Notification (NEW Change)
+    console.log("🚀 Attempting to create Employee Notification...");
+    const employeeNotification = new Notification({
+      employeeId,
+      taskId: newTask._id,
+      message: `Task "${taskTitle}" is assigned to you on ${formattedDate}.`,
+      employeeName: employee.name,
+      type: "employee", // ✅ Type for employee notification
+      createdAt: new Date(),
+      read: false,
+    });
+
+    console.log(
+      "🚀 Created Employee Notification Object:",
+      employeeNotification
+    );
+
+    await employeeNotification.save(); // ✅ SAVE TO DB
+    console.log("✅ Employee Notification Created in DB");
 
     res.status(201).json({
       message: "Task assigned successfully",
       task: newTask,
     });
   } catch (err) {
+    console.error("❌ Error assigning task:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Update the route to use a query parameter
 app.get("/api/tasks", async (req, res) => {
   try {
     const { employeeId } = req.query; // Note: now using req.query
@@ -800,46 +741,171 @@ app.get("/api/tasks", async (req, res) => {
   }
 });
 
+// PUT endpoint to update task status
 app.put("/api/tasks/:taskId", async (req, res) => {
   try {
+    const { status, employeeId } = req.body;
     const { taskId } = req.params;
-    const { status } = req.body;
-    const updatedTask = await Task.findByIdAndUpdate(
+
+    // ✅ Update Task Status
+    const task = await Task.findByIdAndUpdate(
       taskId,
       { status },
       { new: true }
     );
 
-    if (!updatedTask) {
+    if (!task) {
       return res.status(404).json({ error: "Task not found" });
     }
 
-    res.status(200).json(updatedTask);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    // ✅ Fetch employeeName from Employee schema using employeeId
+    const employee = await Employee.findOne({ employeeId });
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
 
+    // ✅ If status is changed to Completed – Notify Admin
+    if (status === "Completed") {
+      const completionNotification = new Notification({
+        employeeId,
+        taskId: task._id,
+        message: `Task "${task.taskTitle}" has been marked as completed by ${employee.name}.`,
+        employeeName: employee.name,
+        type: 'admin', // ✅ Notify Admin when task is completed
+        createdAt: new Date(),
+        read: false,
+      });
 
-// GET endpoint to retrieve notifications for a particular employee
-app.get("/api/notifications", async (req, res) => {
-  try {
-    const { employeeId } = req.query;
-    const notifications = await Notification.find({ employeeId }).sort({
-      createdAt: -1,
+      await completionNotification.save();
+      const io = req.app.get("io");
+io.to(employeeId).emit("new-notification", employeeNotification);
+
+    }
+
+    // ✅ Send Status Update Notification to Employee
+    const employeeNotification = new Notification({
+      employeeId,
+      taskId: task._id,
+      message: `Task "${task.taskTitle}" status has been updated to "${status}".`,
+      employeeName: employee.name,
+      type: 'employee', // ✅ Notify Employee about task status change
+      createdAt: new Date(),
+      read: false,
     });
 
-    // Ensure every notification has a taskId
-    const updatedNotifications = notifications.map((notif) => ({
-      ...notif._doc, // Keep existing properties
-      taskId: notif.taskId || `task-${notif._id}`, // Assign a unique dummy taskId if missing
-    }));
+    await employeeNotification.save();
+    console.log("✅ Employee Notification Saved:", employeeNotification); 
+    res.status(200).json({ task });
+  } catch (err) {
+    console.error("Error updating task status:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    res.json(updatedNotifications);
+
+app.get("/api/admin/notifications", async (req, res) => {
+  try {
+    // ✅ Filter only admin notifications
+    const notifications = await Notification.find({ type: 'admin' })
+      .sort({ createdAt: -1 })
+      .limit(20); // ✅ Limit to 20 recent notifications
+
+    res.status(200).json(notifications);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+
+// ✅ GET endpoint for fetching employee notifications
+app.get("/api/notifications/employee", async (req, res) => {
+  try {
+    const { employeeId, limit = 20, page = 1, read } = req.query;
+
+    if (!employeeId) {
+      console.error("❌ Employee ID is required");
+      return res.status(400).json({ error: "Employee ID is required" });
+    }
+
+    console.log(`🔎 Fetching notifications for employeeId: ${employeeId}`);
+
+    let query = { 
+      employeeId, 
+      type: 'employee' 
+    };
+
+    if (read !== undefined) query.read = read === 'true';
+
+    const notifications = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const totalNotifications = await Notification.countDocuments(query);
+
+    console.log("✅ Retrieved Notifications from DB:", notifications);
+
+    res.status(200).json({
+      notifications,
+      totalNotifications,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalNotifications / limit),
+    });
+  } catch (err) {
+    console.error("❌ Error fetching employee notifications:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ GET unseen notifications for an employee
+app.get("/api/notifications/unseen", async (req, res) => {
+  try {
+    const { employeeId } = req.query;
+
+    if (!employeeId) {
+      return res.status(400).json({ error: "Employee ID is required" });
+    }
+
+    const unseenNotifications = await Notification.find({
+      employeeId,
+      type: "employee",
+      read: false,
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json(unseenNotifications);
+  } catch (err) {
+    console.error("❌ Error fetching unseen notifications:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ✅ PUT to mark all employee notifications as read
+app.put("/api/notifications/mark-seen", async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+
+    if (!employeeId) {
+      return res.status(400).json({ error: "Employee ID is required" });
+    }
+
+    const result = await Notification.updateMany(
+      { employeeId, type: "employee", read: false },
+      { $set: { read: true } }
+    );
+
+    res.status(200).json({
+      message: "All unseen notifications marked as read",
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    console.error("❌ Error marking notifications as seen:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 
 app.post("/api/mark-notification-read", async (req, res) => {
   const { notificationId } = req.body;
@@ -852,142 +918,109 @@ app.post("/api/mark-notification-read", async (req, res) => {
   }
 });
 
-
-
-//Admin Api's
-
-app.post('/api/admin/register', upload.single('caSign'), async (req, res) => {
-  const { username, password, roles } = req.body;
-  const caSign = req.file ? `/uploads/${req.file.filename}` : null; // Save file path
+app.post("/api/admin/register", upload.single("caSign"), async (req, res) => {
+  const { username, password, permissions } = req.body;
+  const caSign = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
     // Check if admin already exists
     const existingAdmin = await Admin.findOne({ username });
     if (existingAdmin) {
-      return res.status(400).json({ message: 'Admin already exists' });
+      return res.status(400).json({ message: "Admin already exists" });
     }
+
+    // ✅ Hash the password before saving
+    const hashedPassword = await bcrypt.hash(password, 10); // 10 = salt rounds
 
     // Create new admin
     const admin = new Admin({
       username,
-      password,
+      password: hashedPassword, // ✅ Save hashed password
       caSign,
-      roles: JSON.parse(roles), 
+      permissions: permissions ? JSON.parse(permissions) : {},
     });
 
     await admin.save();
 
-    // Generate JWT token
-    const token = jwt.sign({ id: admin._id, username: admin.username }, JWT_SECRET, {
-      expiresIn: '1h'
+    res.status(201).json({
+      message: "Admin registered successfully",
+      admin: {
+        _id: admin._id,
+        username: admin.username,
+        caSign: admin.caSign,
+        permissions: admin.permissions,
+      },
     });
-
-    res.status(201).json({ message: 'Admin registered successfully', token });
   } catch (error) {
-    console.error('Error registering admin:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error registering admin:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
-// Admin login Route
-app.post('/api/admin/login', async (req, res) => {
+app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
 
   try {
     const admin = await Admin.findOne({ username });
     if (!admin) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+      return res.status(401).json({ message: "Invalid username or password" });
     }
 
-    const isMatch = await admin.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+      return res.status(401).json({ message: "Invalid username or password" });
     }
 
-    // Generate JWT token
-    const token = jwt.sign({ id: admin._id, username: admin.username }, JWT_SECRET, {
-      expiresIn: '1h'
+    res.status(200).json({
+      message: "Login successful",
+      username: admin.username,
+      employeeId: admin._id,
     });
-
-    res.status(200).json({ token,
-       message: 'Login successful',
-       username: admin.username 
-       });
-  } catch (error) {
-    console.error('Error during login:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
 //fetch all admin names
-app.get('/api/admins', async (req, res) => {
+app.get("/api/admins", async (req, res) => {
   try {
-    const admins = await Admin.find({}, 'username caSign roles');
+    const admins = await Admin.find({}, "username caSign permissions");
     res.status(200).json(admins);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching admins' });
+    res.status(500).json({ message: "Error fetching admins" });
   }
 });
 
 // Delete Admin by ID
-app.delete('/api/admin/:id', async (req, res) => {
+app.delete("/api/admin/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
     const deletedAdmin = await Admin.findByIdAndDelete(id);
     if (!deletedAdmin) {
-      return res.status(404).json({ message: 'Admin not found' });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
-    res.status(200).json({ message: 'Admin deleted successfully' });
+    res.status(200).json({ message: "Admin deleted successfully" });
   } catch (error) {
-    console.error('Error deleting admin:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error deleting admin:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
-// Edit Admin by ID
-// app.put('/api/admin/:id', async (req, res) => {
-//   const { id } = req.params;
-//   const { username, password, roles } = req.body;
-
-//   try {
-//     const admin = await Admin.findById(id);
-//     if (!admin) {
-//       return res.status(404).json({ message: 'Admin not found' });
-//     }
-
-//     if (username) admin.username = username;
-//     if (password) {
-//       const salt = await bcrypt.genSalt(10);
-//       admin.password = await bcrypt.hash(password, salt);
-//     }
-//     // ✅ Update roles
-//     if (roles) {
-//       admin.roles = JSON.parse(roles);
-//     }
-
-
-//     await admin.save();
-
-//     res.status(200).json({ message: 'Admin updated successfully' });
-//   } catch (error) {
-//     console.error('Error updating admin:', error);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
-app.put('/api/admin/:id', upload.single('caSign'), async (req, res) => {
+app.put("/api/admin/:id", upload.single("caSign"), async (req, res) => {
   const { id } = req.params;
-  const { username, password, roles } = req.body;
-  
+  const { username, password, permissions } = req.body;
+
   try {
     const admin = await Admin.findById(id);
     if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
     if (username) admin.username = username;
-    
+
     // ✅ Update password if provided
     if (password) {
       const salt = await bcrypt.genSalt(10);
@@ -999,22 +1032,20 @@ app.put('/api/admin/:id', upload.single('caSign'), async (req, res) => {
       admin.caSign = `/uploads/${req.file.filename}`;
     }
 
-    // ✅ Update roles
-    if (roles) {
-      admin.roles = JSON.parse(roles);
+    // ✅ Update permissions
+    if (permissions) {
+      admin.permissions = JSON.parse(permissions);
     }
 
     await admin.save();
 
-    res.status(200).json({ message: 'Admin updated successfully' });
+    res.status(200).json({ message: "Admin updated successfully" });
   } catch (error) {
-    console.error('Error updating admin:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error updating admin:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
-
-// Add a middleware
 const protectAdmin = (req, res, next) => {
   let token;
 
@@ -1038,12 +1069,6 @@ const protectAdmin = (req, res, next) => {
   }
 };
 
-
-
-
-
-
-
 app.get("/get-report", async (req, res) => {
   try {
     const { sessionId } = req.query;
@@ -1055,7 +1080,6 @@ app.get("/get-report", async (req, res) => {
 
       if (!report) {
         console.log(`❌ Report not found for sessionId: ${sessionId}`);
-
         return res.status(404).json({
           success: false,
           message: "Report not found",
@@ -1067,7 +1091,6 @@ app.get("/get-report", async (req, res) => {
         success: true,
         data: report,
       });
-
     } else {
       console.log("🔎 Fetching all reports...");
 
@@ -1075,7 +1098,6 @@ app.get("/get-report", async (req, res) => {
 
       if (!reports.length) {
         console.log("❌ No reports found");
-
         return res.status(404).json({
           success: false,
           message: "No reports found",
@@ -1098,9 +1120,6 @@ app.get("/get-report", async (req, res) => {
     });
   }
 });
-
-
-
 
 app.get("/get-report-data/:sessionId", async (req, res) => {
   try {
@@ -1125,14 +1144,309 @@ app.get("/get-report-data/:sessionId", async (req, res) => {
   }
 });
 
+//Bank Details
+
+// Create Schema and Model
+const bankDetailsSchema = new mongoose.Schema({
+  sessionId: String,
+  AccountInformation: {
+    clientName: String,
+    businessName: String,
+  },
+
+  ProjectReportSetting: {
+    BankDetails: {
+      Bank: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+      BankManagerName: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+      Post: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+      ContactNo: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+      EmailId: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+      IFSCCode: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+      City: {
+        name: String,
+        id: String,
+        value: { type: String, default: "" },
+        isCustom: Boolean,
+      },
+    },
+  },
+});
+
+const BankDetails = mongoose.model("formdatas", bankDetailsSchema);
+
+app.get("/api/bank-details", async (req, res) => {
+  try {
+    // ✅ Fetch all documents from the collection
+    const data = await BankDetails.find();
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: "No bank details found" });
+    }
+
+    // ✅ Clean data format
+    const result = data
+      .filter(
+        (item) => item?.ProjectReportSetting?.BankDetails?.IFSCCode?.value
+      ) // ✅ Only include available IFSC codes
+      .map((item) => ({
+        clientName: item.AccountInformation?.clientName || "N/A",
+        businessName: item.AccountInformation?.businessName || "N/A",
+        bankDetails: {
+          Bank: String(
+            item.ProjectReportSetting?.BankDetails?.Bank?.value || ""
+          ),
+          BankManagerName: String(
+            item.ProjectReportSetting?.BankDetails?.BankManagerName?.value || ""
+          ),
+          Post: String(
+            item.ProjectReportSetting?.BankDetails?.Post?.value || ""
+          ),
+          ContactNo: String(
+            item.ProjectReportSetting?.BankDetails?.ContactNo?.value || ""
+          ),
+          EmailId: String(
+            item.ProjectReportSetting?.BankDetails?.EmailId?.value || ""
+          ),
+          IFSCCode: String(
+            item.ProjectReportSetting?.BankDetails?.IFSCCode?.value || ""
+          ),
+          City: String(
+            item.ProjectReportSetting?.BankDetails?.City?.value || ""
+          ),
+        },
+      }));
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("🔥 Error fetching bank details:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/bank-filters", async (req, res) => {
+  try {
+    // ✅ Aggregate data from `BankDetails` collection and combine with another collection using `$unionWith`
+    const bankData = await BankDetails.aggregate([
+      // ✅ Extract from the first collection
+      {
+        $project: {
+          bankName: {
+            $ifNull: ["$ProjectReportSetting.BankDetails.Bank.value", "N/A"],
+          },
+          ifscCode: {
+            $ifNull: [
+              "$ProjectReportSetting.BankDetails.IFSCCode.value",
+              "N/A",
+            ],
+          },
+          managerName: {
+            $ifNull: [
+              "$ProjectReportSetting.BankDetails.BankManagerName.value",
+              "N/A",
+            ],
+          },
+        },
+      },
+      // ✅ Combine with another collection
+      {
+        $unionWith: {
+          coll: "bankdetails", // ✅ Name of the second collection
+          pipeline: [
+            {
+              $project: {
+                bankName: { $ifNull: ["$bankName", "N/A"] },
+                ifscCode: { $ifNull: ["$ifscCode", "N/A"] },
+                managerName: { $ifNull: ["$managerName", "N/A"] },
+              },
+            },
+          ],
+        },
+      },
+      // ✅ Group to remove duplicates based on IFSC code
+      {
+        $group: {
+          _id: {
+            bankName: "$bankName",
+            ifscCode: "$ifscCode",
+          },
+          managerNames: { $addToSet: "$managerName" },
+        },
+      },
+    ]);
+
+    console.log("✅ Combined Bank Data:", bankData);
+
+    // ✅ Create clean bank options
+    const bankOptions = bankData.map((item) => ({
+      label: `${String(item._id.bankName)} (${String(item._id.ifscCode)})`,
+      value: String(item._id.ifscCode) || String(item._id.bankName),
+    }));
+
+    // ✅ Create clean manager options (unique values)
+    const managerOptions = bankData.flatMap((item) =>
+      item.managerNames.map((manager) => ({
+        label: String(manager),
+        value: String(manager),
+      }))
+    );
+
+    res.status(200).json({
+      bankOptions,
+      managerOptions,
+    });
+  } catch (error) {
+    console.error("🔥 Error fetching filter options:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/api/client-filters", async (req, res) => {
+  try {
+    // ✅ Aggregate data from `formdatas` and `clients` collections
+    const clientData = await FormData.aggregate([
+      // ✅ Extract data from the formdatas collection
+      {
+        $project: {
+          clientName: { $ifNull: ["$AccountInformation.clientName", "N/A"] },
+          clientEmail: { $ifNull: ["$AccountInformation.clientEmail", "N/A"] },
+          clientPhone: { $ifNull: ["$AccountInformation.clientPhone", "N/A"] },
+        },
+      },
+      // ✅ Combine data with the clients collection
+      {
+        $unionWith: {
+          coll: "clients", // ✅ Name of the second collection
+          pipeline: [
+            {
+              $project: {
+                clientName: { $ifNull: ["$clientName", "N/A"] },
+                clientEmail: { $ifNull: ["$emailId", "N/A"] }, // Assuming `emailId` field in `clients` collection
+                clientPhone: { $ifNull: ["$contactNo", "N/A"] }, // Assuming `contactNo` field in `clients` collection
+              },
+            },
+          ],
+        },
+      },
+      // ✅ Group to remove duplicates based on clientName and clientEmail
+      {
+        $group: {
+          _id: {
+            clientName: "$clientName",
+            clientEmail: "$clientEmail",
+          },
+          clientPhone: { $first: "$clientPhone" }, // Select one phone number for each client
+        },
+      },
+    ]);
+
+    console.log("✅ Combined Client Data from Both Collections:", clientData);
+
+    // ✅ Create clean client options (with clientName as label and clientEmail as value)
+    const clientOptions = clientData.map((item) => ({
+      label: item._id.clientName, // Only the client name
+      value: item._id.clientEmail, // The email as the value
+    }));
+
+    // Return client options
+    res.status(200).json({
+      clientOptions,
+    });
+  } catch (error) {
+    console.error("🔥 Error fetching client data:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/api/account-details", async (req, res) => {
+  try {
+    // ✅ Fetch only AccountInformation field from the schema
+    const accountDetails = await FormData.find(
+      {},
+      { AccountInformation: 1, _id: 0 }
+    );
+
+    res.status(200).json({ accountDetails });
+  } catch (error) {
+    console.error("Error fetching account details:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// captcha code
+
+app.post("/api/verify-captcha", async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res
+      .status(400)
+      .json({ success: false, error: "No CAPTCHA token provided" });
+  }
+
+  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+
+  const verificationURL = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${token}`;
+
+  try {
+    const response = await axios.post(verificationURL);
+    const data = response.data;
+
+    if (data.success) {
+      res.status(200).json({ success: true });
+    } else {
+      res
+        .status(400)
+        .json({ success: false, error: "CAPTCHA verification failed" });
+    }
+  } catch (error) {
+    console.error("CAPTCHA verify server error:", error);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
 
 /* ============================
    Start the Server
    ============================ */
-
+app.set("io", io);
 // const PORT = 5000;
 const PORT = process.env.PORT || 5000; // ✅ Use process.env.PORT
 
-app.listen(PORT, () =>
+// app.listen(PORT, () =>
+//   console.log(`Server running on http://localhost:${PORT}`)
+// );
+
+
+
+server.listen(PORT, () =>
   console.log(`Server running on http://localhost:${PORT}`)
 );
