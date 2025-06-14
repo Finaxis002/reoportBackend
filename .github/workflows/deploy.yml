@@ -24,4 +24,5 @@ jobs:
             git pull origin main
             npm install
             pm2 restart reportsbe --update-env
+            pm2 save
           EOF
