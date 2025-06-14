@@ -21,9 +21,13 @@ const clientRoutes = require('./routes/clientRoute');
 const formdatasRoutes = require('./routes/formdatasRoute')
 const axios = require('axios');
 const connectDB = require("./config/db");
+const otpRoutes = require('./routes/otpRoutes');
+const otpRouteForExport = require('./routes/otpRouteForExport');
 // const http = require('http');
 // const { Server } = require("socket.io");
-
+const nodemailer = require("nodemailer");
+const activityRoute = require('./routes/activityRoute');
+const { send } = require("process");
 
 
 const app = express();
@@ -44,6 +48,10 @@ app.use('/api', bankRoutes);
 app.use("/api/clients", clientRoutes);
 
 app.use("/api", formdatasRoutes);
+app.use('/api/otp', otpRoutes);
+app.use('/api/otpRouteForExport', otpRouteForExport);
+app.use('/api', activityRoute)
+
 
 // 🔁 4. Create HTTP server and bind Socket.IO
 // const server = http.createServer(app);
@@ -84,33 +92,11 @@ if (!process.env.MONGODB_URI) {
 
 // ✅ Connect to MongoDB with updated URI
 connectDB();
-// mongoose
-//   .connect("mongodb+srv://finaxis-user-31:RK8%28ha7Haa7%23jU%25@cluster0.ykhfs.mongodb.net/test?retryWrites=true&w=majority", {
-//     useNewUrlParser: true,
-//     useUnifiedTopology: true,
-//   })
-//   .then(() => console.log("MongoDB Atlas connected"))
-//   .catch((err) => console.error("Error connecting to MongoDB Atlas:", err));
+
 
 // JWT token authentication
   const JWT_SECRET = process.env.JWT_SECRET; // Get from .env
   
-  
-  // Connect to MongoDB
-// mongoose
-//   .connect("mongodb://127.0.0.1:27017/test", {
-//     useNewUrlParser: true,
-//     useUnifiedTopology: true,
-//   })
-//   .then(() => console.log("MongoDB connected"))
-//   .catch((err) => console.error("Error connecting to MongoDB:", err));
-
-/* ============================
-     User Schema & Endpoints
-   ============================ */
-
-// Define Schema
-
 
 
 // Configure Storage
@@ -136,6 +122,10 @@ const fileFilter = (req, file, cb) => {
 // Set up Multer middleware
 const upload = multer({ storage, fileFilter });
 // const upload = multer({ storage }).single('caSign');
+
+app.get("/", async(req, res) => {
+  send("Backend is Working !!!!")
+})
 
 
 
@@ -378,26 +368,31 @@ app.get("/api/clients", async (req, res) => {
 });
 
 
+// ✅ Updated Express API Route
 app.get("/api/businesses", async (req, res) => {
   try {
-    // Fetch all business names along with their client names
     const businesses = await FormData.find(
       {},
-      { "AccountInformation.clientName": 1, "AccountInformation.businessName": 1, _id: 0 }
+      {
+        "AccountInformation.businessOwner": 1,
+        "AccountInformation.businessName": 1,
+        _id: 0,
+      }
     );
 
     if (!businesses.length) {
       return res.status(404).json({ message: "No businesses found" });
     }
 
-    // Format the result as "BusinessName (ClientName)"
     const formattedBusinessNames = businesses
       .map(({ AccountInformation }) => {
-        const clientName = AccountInformation?.clientName || "Unknown Client";
-        const businessName = AccountInformation?.businessName || "Unknown Business";
-        return `${businessName} (${clientName})`;
+        const businessOwner =
+          AccountInformation?.businessOwner || "Unknown Owner";
+        const businessName =
+          AccountInformation?.businessName || "Unknown Business";
+        return `${businessName} (${businessOwner})`;
       })
-      .filter((entry) => entry !== "Unknown Business (Unknown Client)"); // Remove empty entries
+      .filter((entry) => entry !== "Unknown Business (Unknown Owner)");
 
     res.status(200).json({ businesses: formattedBusinessNames });
   } catch (error) {
@@ -488,9 +483,9 @@ app.post("/api/employees/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid password" });
     }
 
-    if (employee.isLoggedIn) {
-      return res.status(403).json({ error: "Already logged in from another device" });
-    }
+    // if (employee.isLoggedIn) {
+    //   return res.status(403).json({ error: "Already logged in from another device" });
+    // }
 
     // ✅ Set login status
     employee.isLoggedIn = true;
@@ -547,26 +542,26 @@ app.delete("/api/employees/:employeeId", async (req, res) => {
 });
 
 // PUT endpoint to update an employee by employeeId
-// app.put("/api/employees/:employeeId", async (req, res) => {
-//   try {
-//     const { employeeId } = req.params;
-//     // Update the employee with the new data from the request body
-//     const updatedEmployee = await Employee.findOneAndUpdate(
-//       { employeeId },
-//       req.body,
-//       { new: true, runValidators: true }
-//     );
-//     if (!updatedEmployee) {
-//       return res.status(404).json({ error: "Employee not found" });
-//     }
-//     res.status(200).json({
-//       message: "Employee updated successfully",
-//       employee: updatedEmployee,
-//     });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// });
+app.put("/api/employees/:employeeId", async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    // Update the employee with the new data from the request body
+    const updatedEmployee = await Employee.findOneAndUpdate(
+      { employeeId },
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedEmployee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+    res.status(200).json({
+      message: "Employee updated successfully",
+      employee: updatedEmployee,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 
 /* ============================
@@ -609,61 +604,7 @@ app.put("/api/employees/:employeeId", async (req, res) => {
   }
 });
 
-// POST endpoint to create a task
 
-// app.post("/api/tasks", async (req, res) => {
-//   try {
-//     const { employeeId, taskTitle, taskDescription, dueDate } = req.body;
-
-//     const employee = await Employee.findOne({ employeeId });
-//     if (!employee) {
-//       return res.status(404).json({ error: "Employee not found" });
-//     }
-
-//     const newTask = new Task({
-//       employeeId,
-//       taskTitle,
-//       taskDescription,
-//       dueDate,
-//       createdAt: new Date(),
-//     });
-
-//     await newTask.save();
-
-//     const adminNotification = new Notification({
-//       employeeId,
-//       taskId: newTask._id,
-//       message: `You assigned a new task "${taskTitle}" to ${employee.name}.`,
-//       employeeName: employee.name,
-//       type: 'admin',
-//       createdAt: new Date(),
-//       read: false,
-//     });
-
-//     await adminNotification.save();
-
-//     const employeeNotification = new Notification({
-//       employeeId,
-//       taskId: newTask._id,
-//       message: `Task "${taskTitle}" is assigned to you.`,
-//       employeeName: employee.name,
-//       type: 'employee',
-//       createdAt: new Date(),
-//       read: false,
-//     });
-
-//     await employeeNotification.save();
-//     console.log("✅ Employee Notification Created:", employeeNotification);
-
-//     res.status(201).json({
-//       message: "Task assigned successfully",
-//       task: newTask,
-//     });
-//   } catch (err) {
-//     console.error("Error assigning task:", err);
-//     res.status(500).json({ error: err.message });
-//   }
-// });
 app.post("/api/tasks", async (req, res) => {
   try {
     const { employeeId, taskTitle, taskDescription, dueDate } = req.body;
@@ -813,18 +754,7 @@ app.put("/api/tasks/:taskId", async (req, res) => {
 });
 
 
-// ✅ GET endpoint for admin notifications
-// app.get("/api/admin/notifications", async (req, res) => {
-//   try {
-//     const notifications = await Notification.find({})
-//       .sort({ createdAt: -1 })
-//       .limit(20); // ✅ Limit to 20 recent notifications
 
-//     res.status(200).json(notifications);
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// });
 // ✅ GET endpoint for admin notifications
 
 app.get("/api/admin/notifications", async (req, res) => {
@@ -978,32 +908,195 @@ app.post('/api/admin/register', upload.single('caSign'), async (req, res) => {
 });
 
 // Admin login Route
-app.post('/api/admin/login', async (req, res) => {
+// app.post('/api/admin/login', async (req, res) => {
+//   const { username, password } = req.body;
+
+//   try {
+//     const admin = await Admin.findOne({ username });
+//     if (!admin) {
+//       return res.status(401).json({ message: 'Invalid username or password' });
+//     }
+
+//     const isMatch = await admin.comparePassword(password);
+//     if (!isMatch) {
+//       return res.status(401).json({ message: 'Invalid username or password' });
+//     }
+
+//     // Generate JWT token
+//     const token = jwt.sign({ id: admin._id, username: admin.username }, JWT_SECRET, {
+//       expiresIn: '1h'
+//     });
+
+//     res.status(200).json({ token,
+//        message: 'Login successful',
+//        username: admin.username 
+//        });
+//   } catch (error) {
+//     console.error('Error during login:', error);
+//     res.status(500).json({ message: 'Internal Server Error' });
+//   }
+// });
+
+// Admin login Route
+app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
+  const cleanUsername = username.trim().toLowerCase();
+
+  console.log("Login attempt for username:", cleanUsername);
+  console.log("Password received:", password);
 
   try {
-    const admin = await Admin.findOne({ username });
+    const admin = await Admin.findOne({ username: cleanUsername });
     if (!admin) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+      console.log("Login failed: admin not found for username:", cleanUsername);
+      return res.status(401).json({ message: "Invalid username or password" });
     }
 
+    console.log("Admin found:", admin.username);
+    console.log("Stored password hash:", admin.password);
+
+const trimmedPassword = password.trim();
     const isMatch = await admin.comparePassword(password);
+     console.log("Password match result:", isMatch);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+      console.log("Login failed: incorrect password for username:", cleanUsername);
+      return res.status(401).json({ message: "Invalid username or password" });
     }
 
     // Generate JWT token
-    const token = jwt.sign({ id: admin._id, username: admin.username }, JWT_SECRET, {
-      expiresIn: '1h'
+    const token = jwt.sign(
+      { id: admin._id, username: admin.username },
+      JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
+ console.log("Login successful for username:", cleanUsername);
+    res
+      .status(200)
+      .json({ token, message: "Login successful", username: admin.username });
+  } catch (error) {
+    console.error("Error during login:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+app.post("/api/admin/hardcoded-login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const latest = await MainAdminPassword.findOne({ username }).sort({
+      changedAt: -1,
     });
 
-    res.status(200).json({ token,
-       message: 'Login successful',
-       username: admin.username 
-       });
+    if (!latest) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, latest.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Login successful (DB fallback)",
+      username: latest.username,
+      token: "db-fallback-token", // You can generate JWT later if needed
+    });
   } catch (error) {
-    console.error('Error during login:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error in fallback admin login:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Create a schema for storing main admin passwords
+const mainAdminPasswordSchema = new mongoose.Schema({
+  username: { type: String, required: true },
+  password: { type: String, required: true }, // This will store the hashed password
+  changedAt: { type: Date, default: Date.now },
+});
+
+const MainAdminPassword = mongoose.model(
+  "MainAdminPassword",
+  mainAdminPasswordSchema
+);
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "shardaassociates.in@gmail.com",
+    pass: "ullq uygv ynkk rfsi", // ✔️ Use a Gmail app password here!
+  },
+});
+
+app.post("/api/admin/change-password", async (req, res) => {
+  const { newPassword, username } = req.body;
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await MainAdminPassword.create({
+      username,
+      password: hashedPassword,
+    });
+
+    // ✅ Add back the mail sending logic
+    const mailOptions = {
+      from: '"Report Software" <shardaassociates.in@gmail.com>',
+      to: "caanunaysharda@gmail.com",
+      subject: "🔐 Admin Password Changed - Report Software Notification",
+      text: `The admin password for ${username} has been changed successfully.`,
+
+      html: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); overflow: hidden;">
+      <div style="background-color: #4f46e5; padding: 20px;">
+        <h2 style="color: #ffffff; margin: 0;">🔐 Password Changed</h2>
+        <p style="color: #e0e7ff; margin: 5px 0 0;">Admin Notification - Report Software</p>
+      </div>
+
+      <div style="padding: 20px;">
+        <p>Dear Admin,</p>
+        <p>This is to inform you that the password for the admin account <strong>(${username})</strong> has been successfully changed.</p>
+
+        <table style="margin-top: 20px; width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px; background-color: #f9fafb; border: 1px solid #e5e7eb;"><strong>Username</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">${username}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; background-color: #f9fafb; border: 1px solid #e5e7eb;"><strong>New Password</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">${newPassword}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; background-color: #f9fafb; border: 1px solid #e5e7eb;"><strong>Changed At</strong></td>
+            <td style="padding: 8px; border: 1px solid #e5e7eb;">${new Date().toLocaleString()}</td>
+          </tr>
+        </table>
+
+        <p style="margin-top: 20px;">If you did not initiate this change, please contact the system administrator immediately.</p>
+
+        <p style="margin-top: 20px;">Regards,<br/><strong>Report Software Team</strong></p>
+      </div>
+
+      <div style="background-color: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #6b7280;">
+        This is an automated message from Report Software. Please do not reply to this email.
+      </div>
+    </div>
+  </div>
+  `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Email sent:", info.response);
+
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
@@ -1035,73 +1128,43 @@ app.delete('/api/admin/:id', async (req, res) => {
 });
 
 // Edit Admin by ID
-// app.put('/api/admin/:id', async (req, res) => {
-//   const { id } = req.params;
-//   const { username, password, roles } = req.body;
 
-//   try {
-//     const admin = await Admin.findById(id);
-//     if (!admin) {
-//       return res.status(404).json({ message: 'Admin not found' });
-//     }
+app.put('/api/admin/:id', async (req, res) => {
+  console.log('Raw req.body:', req.body);
 
-//     if (username) admin.username = username;
-//     if (password) {
-//       const salt = await bcrypt.genSalt(10);
-//       admin.password = await bcrypt.hash(password, salt);
-//     }
-//     // ✅ Update roles
-//     if (roles) {
-//       admin.roles = JSON.parse(roles);
-//     }
-
-
-//     await admin.save();
-
-//     res.status(200).json({ message: 'Admin updated successfully' });
-//   } catch (error) {
-//     console.error('Error updating admin:', error);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
-app.put('/api/admin/:id', upload.single('caSign'), async (req, res) => {
   const { id } = req.params;
   const { username, password, roles } = req.body;
-  console.log('Request body:', req.body); // Debug log to check what is being sent
 
   try {
     const admin = await Admin.findById(id);
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
-    }
+    if (!admin) return res.status(404).json({ message: 'Admin not found' });
 
-    if (username) admin.username = username;
-    
-    // ✅ Update password if provided
+    if (username) admin.username = username.toLowerCase().trim();
+
     if (password) {
-      const salt = await bcrypt.genSalt(10);
-      admin.password = await bcrypt.hash(password, salt);
+      if (password.startsWith('$2b$')) {
+        admin.password = password;
+        console.log('Password appears already hashed, skipping re-hash');
+      } else {
+        admin.password = password.trim();
+      }
     }
 
-    // ✅ Update CA Sign (file upload)
-    if (req.file) {
-      admin.caSign = `/uploads/${req.file.filename}`;
-    }
-
-    // ✅ Update roles
     if (roles) {
-      admin.roles = JSON.parse(roles);
+      if (typeof roles === 'string') admin.roles = JSON.parse(roles);
+      else admin.roles = roles;
     }
+
+    // No file upload handling here
 
     await admin.save();
-    console.log('Updated Admin:', admin);
+
     res.status(200).json({ message: 'Admin updated successfully' });
   } catch (error) {
     console.error('Error updating admin:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
 
 // Add a middleware
 const protectAdmin = (req, res, next) => {
@@ -1196,6 +1259,35 @@ app.get("/get-report-data/:sessionId", async (req, res) => {
     res
       .status(500)
       .json({ message: "Internal Server Error", error: error.message });
+  }
+});
+
+app.delete("/delete-report/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedReport = await FormData.findByIdAndDelete(id);
+
+    if (!deletedReport) {
+      console.log(`❌ Report with ID ${id} not found`);
+      return res.status(404).json({
+        success: false,
+        message: "Report not found",
+      });
+    }
+
+    console.log(`✅ Report with ID ${id} deleted successfully`);
+    return res.status(200).json({
+      success: true,
+      message: "Report deleted successfully",
+    });
+  } catch (error) {
+    console.error("🔥 Error deleting report:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete report",
+      error: error.message,
+    });
   }
 });
 
@@ -1388,62 +1480,6 @@ app.get("/api/bank-filters", async (req, res) => {
   }
 });
 
-// app.get("/api/client-filters", async (req, res) => {
-//   try {
-//     // ✅ Aggregate data from `formdatas` and `clients` collections
-//     const clientData = await FormData.aggregate([
-//       // ✅ Extract data from the formdatas collection
-//       {
-//         $project: {
-//           clientName: { $ifNull: ["$AccountInformation.clientName", "N/A"] },
-//           clientEmail: { $ifNull: ["$AccountInformation.clientEmail", "N/A"] },
-//           clientPhone: { $ifNull: ["$AccountInformation.clientPhone", "N/A"] }
-//         }
-//       },
-//       // ✅ Combine data with the clients collection
-//       {
-//         $unionWith: {
-//           coll: "clients", // ✅ Name of the second collection
-//           pipeline: [
-//             {
-//               $project: {
-//                 clientName: { $ifNull: ["$clientName", "N/A"] },
-//                 clientEmail: { $ifNull: ["$emailId", "N/A"] }, // Assuming `emailId` field in `clients` collection
-//                 clientPhone: { $ifNull: ["$contactNo", "N/A"] } // Assuming `contactNo` field in `clients` collection
-//               }
-//             }
-//           ]
-//         }
-//       },
-//       // ✅ Group to remove duplicates based on clientName and clientEmail
-//       {
-//         $group: {
-//           _id: {
-//             clientName: "$clientName",
-//             clientEmail: "$clientEmail"
-//           },
-//           clientPhone: { $first: "$clientPhone" }, // Select one phone number for each client
-//         }
-//       }
-//     ]);
-
-//     console.log("✅ Combined Client Data from Both Collections:", clientData);
-
-//     // ✅ Create clean client options (with clientName as label and clientEmail as value)
-//     const clientOptions = clientData.map((item) => ({
-//       label: item._id.clientName,  // Only the client name
-//       value: item._id.clientEmail  // The email as the value
-//     }));
-
-//     // Return client options
-//     res.status(200).json({
-//       clientOptions
-//     });
-//   } catch (error) {
-//     console.error("🔥 Error fetching client data:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
 
 
 app.get("/api/account-details", async (req, res) => {
@@ -1493,13 +1529,8 @@ app.post('/api/verify-captcha', async (req, res) => {
    Start the Server
    ============================ */
 // ✅ Export io to use it in route files
-// app.set("io", io);
-// const PORT = 5000;
 const PORT = process.env.PORT || 5000;  // ✅ Use process.env.PORT
 
 app.listen(PORT, () =>
   console.log(`Server running on http://localhost:${PORT}`)
 );
-// server.listen(PORT, () =>
-//   console.log(`Server running on http://localhost:${PORT}`)
-// );
