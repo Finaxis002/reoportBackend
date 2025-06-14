@@ -124,7 +124,7 @@ const upload = multer({ storage, fileFilter });
 // const upload = multer({ storage }).single('caSign');
 
 app.get("/", async(req, res) => {
-  send("Backend is Working !!!!")
+  res.send("Backend is Working !!!!!!!!!!")
 })
 
 
