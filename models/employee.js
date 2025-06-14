@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-
+// this is not in use 
 
 // Define Employee Schema (separate from your User schema)
 const EmployeeSchema = new mongoose.Schema(
