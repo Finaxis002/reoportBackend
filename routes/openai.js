@@ -1,11 +1,5 @@
 const express = require("express");
 const router = express.Router();
-// Import the Google Generative AI library
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-// Access your API key as an environment variable
-// Ensure your .env file has GEMINI_API_KEY=YOUR_API_KEY
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 router.post("/generate-introduction", async (req, res) => {
   const { businessDescription } = req.body;
@@ -15,20 +9,58 @@ router.post("/generate-introduction", async (req, res) => {
   }
 
   try {
-    // *** CHANGE HERE: Using 'gemini-1.5-flash-latest' model ***
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    const MODEL_NAME = "gemini-1.5-flash-latest"; 
 
-    const prompt = `Write a professional business introduction based on the following business description:\n\n${businessDescription}`;
+    // *** UPDATED: Even stricter prompt to prevent placeholders ***
+    let chatHistory = [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `Based on the following business description, write a single, complete, and professional business introduction that is ready for immediate use. Do NOT include any placeholders like [insert text here], numbering, or multiple versions. Just the polished introduction itself.`,
+          },
+          {
+            text: `Business Description: ${businessDescription}`,
+          },
+        ],
+      },
+    ];
 
-    // Call the generateContent method with the prompt
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text(); // Extract the generated text
+    const payload = {
+      contents: chatHistory,
+      generationConfig: {
+        temperature: 0.7, 
+        candidateCount: 1, 
+      },
+    };
 
-    res.json({ introduction: text.trim() });
+    const apiKey = process.env.GEMINI_API_KEY; 
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+
+    if (
+      result.candidates &&
+      result.candidates.length > 0 &&
+      result.candidates[0].content &&
+      result.candidates[0].content.parts &&
+      result.candidates[0].content.parts.length > 0
+    ) {
+      const text = result.candidates[0].content.parts[0].text;
+      res.json({ introduction: text.trim() });
+    } else {
+      console.error("Unexpected Gemini API response structure or no candidates:", JSON.stringify(result, null, 2));
+      res.status(500).json({ error: "Failed to generate introduction from AI." });
+    }
   } catch (err) {
-    console.error("Gemini API error:", err.message);
-    res.status(500).json({ error: "Failed to generate introduction" });
+    console.error("Backend error during Gemini API call:", err.message);
+    res.status(500).json({ error: "Failed to generate introduction from AI due to server error." });
   }
 });
 
