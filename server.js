@@ -28,7 +28,7 @@ const otpRouteForExport = require('./routes/otpRouteForExport');
 const nodemailer = require("nodemailer");
 const activityRoute = require('./routes/activityRoute');
 const { send } = require("process");
-
+const openaiRoutes = require("./routes/openai");
 
 const app = express();
 
@@ -51,7 +51,7 @@ app.use("/api", formdatasRoutes);
 app.use('/api/otp', otpRoutes);
 app.use('/api/otpRouteForExport', otpRouteForExport);
 app.use('/api', activityRoute)
-
+app.use("/api/openai", openaiRoutes);
 
 // 🔁 4. Create HTTP server and bind Socket.IO
 // const server = http.createServer(app);
