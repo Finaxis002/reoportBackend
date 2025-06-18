@@ -23,6 +23,6 @@ jobs:
             cd /home/reoportBackend
             git pull origin main
             npm install
-            pm2 restart reportsbe --update-env
+            pm2 restart reportsbe || pm2 start server.js --name reoportBackend
             pm2 save
           EOF
