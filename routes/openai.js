@@ -13,18 +13,32 @@ router.post("/generate-introduction", async (req, res) => {
 
     // *** UPDATED: Even stricter prompt to prevent placeholders ***
     let chatHistory = [
+  {
+    role: "user",
+    parts: [
       {
-        role: "user",
-        parts: [
-          {
-            text: `Based on the following business description, write a single, complete, and professional business introduction that is ready for immediate use. Do NOT include any placeholders like [insert text here], numbering, or multiple versions. Just the polished introduction itself.`,
-          },
-          {
-            text: `Business Description: ${businessDescription}`,
-          },
-        ],
-      },
-    ];
+        text: `
+You are an expert business content writer.
+
+Given the following business description, write a single, detailed, and professionally polished business introduction in fluent English, strictly for immediate use in a project report, business plan, or bank document.
+
+Your introduction should:
+- Be up to 1000 words (do not exceed).
+- Present rich context, history, and current trends of the business sector in India when relevant.
+- Explain the business’s core activities, its importance in the economy, recent market developments, and the typical business process.
+- Describe key customer segments, modern technologies or operational trends, government policies, and challenges or opportunities.
+- Use a factual, analytical, and engaging tone in flowing paragraphs (not bullet points or lists).
+- Ensure all information is relevant to the provided business description and avoid generic filler.
+- Do NOT include any placeholders, instructions, prompts, numbering, bullet points, or more than one version. Just output a single, polished introduction.
+- Write as if for an Indian audience, unless the business context is explicitly international.
+
+Business Description: ${businessDescription}
+        `
+      }
+    ]
+  }
+];
+
 
     const payload = {
       contents: chatHistory,
