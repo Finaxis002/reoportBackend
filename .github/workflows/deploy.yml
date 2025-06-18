@@ -21,8 +21,10 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no root@168.231.120.171 << 'EOF'
             cd /home/reoportBackend
+            git reset --hard HEAD
+            git clean -fd
             git pull origin main
             npm install
-            pm2 restart reportsbe || pm2 start server.js --name reoportBackend
+            pm2 restart reportsbe || pm2 start server.js --name reportsbe
             pm2 save
           EOF
