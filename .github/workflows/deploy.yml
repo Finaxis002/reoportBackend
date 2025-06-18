@@ -1,28 +1,31 @@
-name: Deploy Reports Backend to VPS
+name: Deploy Backend to VPS
 
 on:
   push:
-    branches: [main]
+    branches: 
+      - main   # Change this to your branch if needed
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v3
 
-      - name: Set up SSH key
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
 
-      - name: Deploy to VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no root@168.231.120.171 << 'EOF'
-            cd /home/reoportBackend
-            git pull origin main
-            npm install
-            pm2 restart reportsbe || pm2 start server.js --name reoportBackend
-            pm2 save
-          EOF
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v0.1.0  # Use a specific version for stability
+      with:
+        host: ${{ secrets.SERVER_IP }}  # Use secret for server IP
+        username: root
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /home/reoportBackend
+          git pull origin main
+          npm install
+          pm2 restart reportsbe --update-env   # Ensure the service name is correct
