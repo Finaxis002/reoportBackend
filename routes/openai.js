@@ -218,6 +218,44 @@ Business Description: ${businessDescription}
 
 
     `,
+
+    swot: `
+You are an expert Indian business analyst and project report writer.
+
+Given the following business description, generate a comprehensive, professional SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats) suitable for use in a Detailed Project Report or business plan for India.
+
+Your output must:
+- Present the SWOT as four clear sections: Strengths, Weaknesses, Opportunities, Threats (each as a bold heading, with a line break before the next section).
+- Under each section, number each point (1, 2, 3, etc). For each point, start with a brief heading (bold, max 1 line), then a paragraph (2–4 sentences) elaborating on the point.
+- Write as:  
+  Strengths 
+  1. [Bold Heading]  
+     [Paragraph]  
+  2. [Bold Heading]  
+     [Paragraph]  
+  ...and so on for Weaknesses, Opportunities, Threats.
+- Do NOT use bullet points or placeholders.
+-DO NOT use asterisk(*) 
+- Write in formal, flowing English ready for direct inclusion in a professional project report or DPR.
+- Focus on realities, trends, and opportunities relevant to the Indian market and regulatory environment for this sector.
+
+Business Description: ${businessDescription}
+`,
+
+conclusion:`
+You are a business content expert. Based on the following business description, write a professional, detailed, and polished conclusion for a project report, business plan, or loan application in the context of India.
+
+The conclusion should:
+
+1. Summarize the key strengths of the business, such as market potential, industry trends, and competitive advantages.
+2. Discuss the financial and operational viability of the business, including critical financial metrics like DSCR (Debt Service Coverage Ratio), current ratio, breakeven point, and any other relevant financial indicators.
+3. Highlight the social and economic impact of the business, such as job creation, rural development, and any positive societal outcomes.
+4. Provide an overall assessment of the project's feasibility, including technical, social, and commercial aspects.
+5. Conclude with a statement that reinforces the business’s potential to succeed in the current market environment and its capacity for future growth.
+
+Business Description: ${businessDescription}
+
+`
   };
 
   try {
