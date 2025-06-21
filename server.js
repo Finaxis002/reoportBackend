@@ -204,6 +204,31 @@ app.post("/save-step", upload.single("file"), async (req, res) => {
   }
 });
 
+// PUT request to update computed data
+app.put("/save-computed-data/:reportId", async (req, res) => {
+  const { reportId } = req.params;
+  const { computedData } = req.body;
+
+    if (!computedData || typeof computedData !== "object") {
+    return res.status(400).json({ message: "Missing or invalid computed data" });
+  }
+
+  try {
+    const report = await FormData.findByIdAndUpdate(
+      reportId,
+        { $set: { computedData } },
+      { new: true }
+    );
+
+    if (!report) return res.status(404).json({ message: "Report not found" });
+
+    res.status(200).json({ message: "Computed data saved", report });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err });
+  }
+});
+
+
 app.post("/create-new-from-existing", upload.single("file"), async (req, res) => {
   try {
       console.log("🔹 Incoming Request to /create-new-from-existing:", req.body);

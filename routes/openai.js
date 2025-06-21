@@ -82,6 +82,9 @@ router.post("/generate-section", async (req, res) => {
     section,
     businessName,
     businessDescription,
+    averageDSCR,
+    averageCurrentRatio,
+    BEP,
     wordLimit = 1000,
   } = req.body;
   if (!section || !businessDescription) {
@@ -247,13 +250,17 @@ You are a business content expert. Based on the following business description, 
 
 The conclusion should:
 
-1. Summarize the key strengths of the business, such as market potential, industry trends, and competitive advantages.
-2. Discuss the financial and operational viability of the business, including critical financial metrics like DSCR (Debt Service Coverage Ratio), current ratio, breakeven point, and any other relevant financial indicators.
-3. Highlight the social and economic impact of the business, such as job creation, rural development, and any positive societal outcomes.
-4. Provide an overall assessment of the project's feasibility, including technical, social, and commercial aspects.
-5. Conclude with a statement that reinforces the business’s potential to succeed in the current market environment and its capacity for future growth.
+Summarize the key strengths of the business, such as market potential, industry trends, and competitive advantages.
 
-Business Description: ${businessDescription}
+Discuss the financial and operational viability of the business, including critical financial metrics like the Debt Service Coverage Ratio (DSCR), current ratio, break-even point, and any other relevant financial indicators.
+
+Highlight the social and economic impact of the business, such as job creation, rural development, and any positive societal outcomes.
+
+Provide an overall assessment of the project's feasibility, including technical, social, and commercial aspects.
+
+Conclude with a statement that reinforces the business’s potential to succeed in the current market environment and its capacity for future growth
+
+Business Description: ${businessDescription} average DSCR : ${averageDSCR} Average Current Ratio : ${averageCurrentRatio}  Break even Point : ${BEP}
 
 `
   };
