@@ -9,6 +9,10 @@ const formSchema = new mongoose.Schema({
   Expenses: Object,
   Revenue: Object,
   MoreDetails: Object,
+  computedData: {
+    type: Object,
+    default: {},
+  },
 });
 
 const FormData = mongoose.model("FormData", formSchema); // Model
