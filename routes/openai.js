@@ -245,7 +245,7 @@ Your output must:
 Business Description: ${businessDescription}
 `,
 
-conclusion:`
+    conclusion: `
 You are a business content expert. Based on the following business description, write a professional, detailed, and polished conclusion for a project report, business plan, or loan application in the context of India.
 
 The conclusion should:
@@ -262,10 +262,11 @@ Conclude with a statement that reinforces the business’s potential to succeed 
 
 Business Description: ${businessDescription} average DSCR : ${averageDSCR} Average Current Ratio : ${averageCurrentRatio}  Break even Point : ${BEP}
 
-`
+`,
   };
 
   try {
+    console.log("Prompt Sent to Gemini:", prompts[section]);
     const MODEL_NAME = "gemini-1.5-flash-latest";
     const chatHistory = [
       {
@@ -288,6 +289,7 @@ Business Description: ${businessDescription} average DSCR : ${averageDSCR} Avera
     });
 
     const result = await response.json();
+    console.log("Gemini API Response:", result);
     if (
       result.candidates &&
       result.candidates.length > 0 &&

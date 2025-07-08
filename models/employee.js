@@ -1,21 +1,26 @@
-const mongoose = require("mongoose");
-// this is not in use 
-
-// Define Employee Schema (separate from your User schema)
 const EmployeeSchema = new mongoose.Schema(
-    {
-      employeeId: { type: String, required: true, unique: true },
-      name: { type: String, required: true },
-      email: { type: String, required: true },
-      designation: { type: String, required: true },
-      password: { type: String, required: true } // In production, store a hashed password!
+  {
+    employeeId: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    designation: { type: String, required: true },
+    password: { type: String, required: true }, // In production, store a hashed password!
+    permissions: {
+      generateReport: { type: Boolean, default: false },
+      updateReport: { type: Boolean, default: false },
+      createNewWithExisting: { type: Boolean, default: false },
+      downloadPDF: { type: Boolean, default: false },
+      exportData: { type: Boolean, default: false },
+      generateWord: { type: Boolean, default: false },
+      advanceReport: { type: Boolean, default: false },
     },
-    {
-      collection: "employees" // Using a separate collection for employees
-    }
-  );
-  
-  
-  
-  // Create Employee Model
-  const Employee = mongoose.model("Employee", EmployeeSchema);
+    // In your Mongoose schema
+    isLoggedIn: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    collection: "employees", // Use a separate collection for employees
+  }
+);

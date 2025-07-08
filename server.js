@@ -6,6 +6,7 @@ const cors = require("cors");
 const UserfetchModel = require("./models/Users");
 const Task = require("./models/Task"); // Create a Task model
 const Notification = require("./models/Notification");
+// const Employee = require("./models/employee"); // Import Employee model
 require("dotenv").config();
 const { v4: uuidv4 } = require("uuid"); // ✅ Correct import
 const multer = require("multer");
@@ -35,9 +36,6 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// app.use('/api/admin', adminRoutes)
-// app.use(cors({ origin: "http://localhost:3000" }));
-// (Note: express.json() is built-in so you don't need bodyParser.json())
 
 app.use(cors());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -53,33 +51,6 @@ app.use('/api/otpRouteForExport', otpRouteForExport);
 app.use('/api', activityRoute)
 app.use("/api/openai", openaiRoutes);
 
-// 🔁 4. Create HTTP server and bind Socket.IO
-// const server = http.createServer(app);
-// const io = new Server(server, {
-//   cors: {
-//     origin: [
-//       "http://localhost:3000",
-//       "https://frontend-dashboard-liart.vercel.app/"
-//     ],
-//     methods: ["GET", "POST", "PUT", "DELETE"]
-//   }
-// });
-
-// app.set("io", io);
-
-// io.on("connection", (socket) => {
-//   console.log("🟢 A user connected: ", socket.id);
-
-//   // ✅ Join specific room based on employeeId
-//   socket.on("join", (employeeId) => {
-//     console.log(`🔔 Employee ${employeeId} joined notifications room`);
-//     socket.join(employeeId);
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("🔴 A user disconnected:", socket.id);
-//   });
-// });
 
 
 // ✅ Debug: Print the environment variable
@@ -372,20 +343,53 @@ app.post("/update-step", async (req, res) => {
   }
 });
 
-app.get("/api/clients", async (req, res) => {
+// app.get("/api/clients", async (req, res) => {
+//   try {
+//     // Fetch only client names from AccountInformation field
+//     const clients = await FormData.find(
+//       {},
+//       { "AccountInformation.clientName": 1, _id: 0 }
+//     );
+
+//     // Extract only client names into an array
+//     const clientNames = clients
+//       .map((client) => client.AccountInformation?.clientName)
+//       .filter((name) => name); // Filter out any null or undefined values
+
+//     res.status(200).json({ clientNames });
+//   } catch (error) {
+//     console.error("Error fetching client names:", error);
+//     res.status(500).json({ message: "Internal Server Error" });
+//   }
+// });
+
+
+// ✅ Updated Express API Route
+app.get("/api/formFilter/clients", async (req, res) => {
   try {
-    // Fetch only client names from AccountInformation field
-    const clients = await FormData.find(
-      {},
-      { "AccountInformation.clientName": 1, _id: 0 }
+    // Fetch client names and sessionId from the FormData collection
+    const clients = await FormData.find({}, { "AccountInformation.clientName": 1,"AccountInformation.clientPhone": 1,"AccountInformation.clientEmail": 1,'AccountInformation.location':1 , sessionId: 1, _id: 0 });
+
+    console.log("Fetched Clients:", clients); // Log the results to debug
+
+    // Extract client names and sessionId into an array
+    const clientDetails = clients.map((client) => ({
+      sessionId: client.sessionId,
+      clientName: client.AccountInformation?.clientName,
+      clientPhone: client.AccountInformation?.clientPhone,
+      clientEmail: client.AccountInformation?.clientEmail,
+      address: client.AccountInformation?.location
+
+    }));
+
+    console.log("Client Details:", clientDetails); // Log the extracted details for debugging
+
+    // Filter out any entries where clientName is null or undefined
+    const filteredClients = clientDetails.filter(
+      (client) => client.clientName !== null && client.clientName !== undefined
     );
 
-    // Extract only client names into an array
-    const clientNames = clients
-      .map((client) => client.AccountInformation?.clientName)
-      .filter((name) => name); // Filter out any null or undefined values
-
-    res.status(200).json({ clientNames });
+    res.status(200).json(filteredClients); // Return clientName and sessionId
   } catch (error) {
     console.error("Error fetching client names:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -393,7 +397,6 @@ app.get("/api/clients", async (req, res) => {
 });
 
 
-// ✅ Updated Express API Route
 app.get("/api/businesses", async (req, res) => {
   try {
     const businesses = await FormData.find(
@@ -629,6 +632,7 @@ app.put("/api/employees/:employeeId", async (req, res) => {
   }
 });
 
+// task route
 
 app.post("/api/tasks", async (req, res) => {
   try {
