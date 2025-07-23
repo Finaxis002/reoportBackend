@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
+
 // router.post("/generate-introduction", async (req, res) => {
 //   const { businessDescription } = req.body;
 
@@ -266,6 +267,7 @@ Business Description: ${businessDescription} average DSCR : ${averageDSCR} Avera
   };
 
   try {
+    
     console.log("Prompt Sent to Gemini:", prompts[section]);
     const MODEL_NAME = "gemini-1.5-flash-latest";
     const chatHistory = [
