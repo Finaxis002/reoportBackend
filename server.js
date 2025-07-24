@@ -457,7 +457,8 @@ const EmployeeSchema = new mongoose.Schema(
       exportData: { type: Boolean, default: false },
        generateWord: {type: Boolean, default: false},
        advanceReport: {type: Boolean, default: false},
-      generateGraph: {type: Boolean, default: false}
+      generateGraph: {type: Boolean, default: false},
+      cmaData: {type: Boolean, default: false},
     },
     // In your Mongoose schema
     isLoggedIn: {
