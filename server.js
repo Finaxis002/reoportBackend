@@ -6,7 +6,7 @@ const cors = require("cors");
 const UserfetchModel = require("./models/Users");
 const Task = require("./models/Task"); // Create a Task model
 const Notification = require("./models/Notification");
-// const Employee = require("./models/employee"); // Import Employee model
+const Employee = require("./models/employee"); // Import Employee model
 require("dotenv").config();
 const { v4: uuidv4 } = require("uuid"); // ✅ Correct import
 const multer = require("multer");
@@ -30,6 +30,10 @@ const nodemailer = require("nodemailer");
 const activityRoute = require('./routes/activityRoute');
 const { send } = require("process");
 const openaiRoutes = require("./routes/openai");
+const employeeRoutes = require("./routes/employeeRoute");
+const tasksRoutes = require("./routes/tasksRoute");
+const reportRoutes = require("./routes/reportRoutes");
+const notificationRoute = require("./routes/notificationRoute")
 
 const app = express();
 
@@ -50,7 +54,10 @@ app.use('/api/otp', otpRoutes);
 app.use('/api/otpRouteForExport', otpRouteForExport);
 app.use('/api', activityRoute)
 app.use("/api/openai", openaiRoutes);
-
+app.use("/api/employees", employeeRoutes);
+app.use("/api/tasks", tasksRoutes);
+app.use("/get-report", reportRoutes);
+app.use('/api', notificationRoute);
 
 
 // ✅ Debug: Print the environment variable
@@ -442,458 +449,458 @@ app.get("/api/getUsers", (req, res) => {
    ============================ */
 
 // Define Employee Schema (separate from your User schema)
-const EmployeeSchema = new mongoose.Schema(
-  {
-    employeeId: { type: String, required: true, unique: true },
-    name: { type: String, required: true },
-    email: { type: String, required: true },
-    designation: { type: String, required: true },
-    password: { type: String, required: true }, // In production, store a hashed password!
-    permissions: {
-      generateReport: { type: Boolean, default: false },
-      updateReport: { type: Boolean, default: false },
-      createNewWithExisting: { type: Boolean, default: false },
-      downloadPDF: { type: Boolean, default: false },
-      exportData: { type: Boolean, default: false },
-       generateWord: {type: Boolean, default: false},
-       advanceReport: {type: Boolean, default: false},
-      generateGraph: {type: Boolean, default: false},
-      cmaData: {type: Boolean, default: false},
-    },
-    // In your Mongoose schema
-    isLoggedIn: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  {
-    collection: "employees", // Use a separate collection for employees
-  }
-);
+// const EmployeeSchema = new mongoose.Schema(
+//   {
+//     employeeId: { type: String, required: true, unique: true },
+//     name: { type: String, required: true },
+//     email: { type: String, required: true },
+//     designation: { type: String, required: true },
+//     password: { type: String, required: true }, // In production, store a hashed password!
+//     permissions: {
+//       generateReport: { type: Boolean, default: false },
+//       updateReport: { type: Boolean, default: false },
+//       createNewWithExisting: { type: Boolean, default: false },
+//       downloadPDF: { type: Boolean, default: false },
+//       exportData: { type: Boolean, default: false },
+//        generateWord: {type: Boolean, default: false},
+//        advanceReport: {type: Boolean, default: false},
+//       generateGraph: {type: Boolean, default: false},
+//       cmaData: {type: Boolean, default: false},
+//     },
+//     // In your Mongoose schema
+//     isLoggedIn: {
+//       type: Boolean,
+//       default: false,
+//     },
+//   },
+//   {
+//     collection: "employees", // Use a separate collection for employees
+//   }
+// );
 
 
-// Create Employee Model
-const Employee = mongoose.model("Employee", EmployeeSchema);
+// // Create Employee Model
+// const Employee = mongoose.model("Employee", EmployeeSchema);
 
 
 
 // Endpoint to register (create) a new employee
-app.post("/api/employees/register", async (req, res) => {
-  const { employeeId, name, email, designation, password, permissions } = req.body;
+// app.post("/api/employees/register", async (req, res) => {
+//   const { employeeId, name, email, designation, password, permissions } = req.body;
   
-  if (!employeeId || !name || !email || !designation || !password) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
+//   if (!employeeId || !name || !email || !designation || !password) {
+//     return res.status(400).json({ error: "Missing required fields" });
+//   }
 
-  try {
-    const newEmployee = await Employee.create({
-      employeeId,
-      name,
-      email,
-      designation,
-      password,
-      permissions,
-    });
-    res.status(201).json(newEmployee);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create employee" });
-  }
-});
-
-
-
-app.post("/api/employees/login", async (req, res) => {
-  try {
-    const { employeeId, password } = req.body;
-    const employee = await Employee.findOne({ employeeId });
-
-    if (!employee) {
-      return res.status(401).json({ error: "Invalid employee ID" });
-    }
-
-    if (employee.password !== password) {
-      return res.status(401).json({ error: "Invalid password" });
-    }
-
-    // if (employee.isLoggedIn) {
-    //   return res.status(403).json({ error: "Already logged in from another device" });
-    // }
-
-    // ✅ Set login status
-    employee.isLoggedIn = true;
-    await employee.save();
-
-    res.json({ success: true, employee });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/employees/logout", async (req, res) => {
-  try {
-    const { employeeId } = req.body;
-
-    const employee = await Employee.findOne({ employeeId });
-    if (!employee) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
-
-    employee.isLoggedIn = false;
-    await employee.save();
-
-    res.json({ success: true, message: "Logged out successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Endpoint to get all employees
-app.get("/api/employees", async (req, res) => {
-  try {
-    const employees = await Employee.find({});
-    res.status(200).json(employees);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+//   try {
+//     const newEmployee = await Employee.create({
+//       employeeId,
+//       name,
+//       email,
+//       designation,
+//       password,
+//       permissions,
+//     });
+//     res.status(201).json(newEmployee);
+//   } catch (error) {
+//     res.status(500).json({ error: "Failed to create employee" });
+//   }
+// });
 
 
-// DELETE endpoint to remove an employee by employeeId
-app.delete("/api/employees/:employeeId", async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-    // Find and remove the employee by employeeId
-    const result = await Employee.findOneAndDelete({ employeeId });
-    if (!result) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
-    res.status(200).json({ message: "Employee deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-// PUT endpoint to update an employee by employeeId
-app.put("/api/employees/:employeeId", async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-    // Update the employee with the new data from the request body
-    const updatedEmployee = await Employee.findOneAndUpdate(
-      { employeeId },
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!updatedEmployee) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
-    res.status(200).json({
-      message: "Employee updated successfully",
-      employee: updatedEmployee,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// app.post("/api/employees/login", async (req, res) => {
+//   try {
+//     const { employeeId, password } = req.body;
+//     const employee = await Employee.findOne({ employeeId });
+
+//     if (!employee) {
+//       return res.status(401).json({ error: "Invalid employee ID" });
+//     }
+
+//     if (employee.password !== password) {
+//       return res.status(401).json({ error: "Invalid password" });
+//     }
+
+//     // if (employee.isLoggedIn) {
+//     //   return res.status(403).json({ error: "Already logged in from another device" });
+//     // }
+
+//     // ✅ Set login status
+//     employee.isLoggedIn = true;
+//     await employee.save();
+
+//     res.json({ success: true, employee });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// app.post("/api/employees/logout", async (req, res) => {
+//   try {
+//     const { employeeId } = req.body;
+
+//     const employee = await Employee.findOne({ employeeId });
+//     if (!employee) {
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
+
+//     employee.isLoggedIn = false;
+//     await employee.save();
+
+//     res.json({ success: true, message: "Logged out successfully" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// // Endpoint to get all employees
+// app.get("/api/employees", async (req, res) => {
+//   try {
+//     const employees = await Employee.find({});
+//     res.status(200).json(employees);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 
-/* ============================
-   Fetch Employee on Employee Dashboard
-   ============================ */
+// // DELETE endpoint to remove an employee by employeeId
+// app.delete("/api/employees/:employeeId", async (req, res) => {
+//   try {
+//     const { employeeId } = req.params;
+//     // Find and remove the employee by employeeId
+//     const result = await Employee.findOneAndDelete({ employeeId });
+//     if (!result) {
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
+//     res.status(200).json({ message: "Employee deleted successfully" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
-// GET endpoint to retrieve a single employee by employeeId
-app.get("/api/employees/:employeeId", async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-    const employee = await Employee.findOne({ employeeId });
-    if (!employee) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
-    res.status(200).json(employee);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// // PUT endpoint to update an employee by employeeId
+// app.put("/api/employees/:employeeId", async (req, res) => {
+//   try {
+//     const { employeeId } = req.params;
+//     // Update the employee with the new data from the request body
+//     const updatedEmployee = await Employee.findOneAndUpdate(
+//       { employeeId },
+//       req.body,
+//       { new: true, runValidators: true }
+//     );
+//     if (!updatedEmployee) {
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
+//     res.status(200).json({
+//       message: "Employee updated successfully",
+//       employee: updatedEmployee,
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 
-// PUT endpoint to update an employee by employeeId
-app.put("/api/employees/:employeeId", async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-    const updatedEmployee = await Employee.findOneAndUpdate(
-      { employeeId },
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!updatedEmployee) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
-    res.status(200).json({
-      message: "Employee updated successfully",
-      employee: updatedEmployee,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// /* ============================
+//    Fetch Employee on Employee Dashboard
+//    ============================ */
+
+// // GET endpoint to retrieve a single employee by employeeId
+// app.get("/api/employees/:employeeId", async (req, res) => {
+//   try {
+//     const { employeeId } = req.params;
+//     const employee = await Employee.findOne({ employeeId });
+//     if (!employee) {
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
+//     res.status(200).json(employee);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+
+// // PUT endpoint to update an employee by employeeId
+// app.put("/api/employees/:employeeId", async (req, res) => {
+//   try {
+//     const { employeeId } = req.params;
+//     const updatedEmployee = await Employee.findOneAndUpdate(
+//       { employeeId },
+//       req.body,
+//       { new: true, runValidators: true }
+//     );
+//     if (!updatedEmployee) {
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
+//     res.status(200).json({
+//       message: "Employee updated successfully",
+//       employee: updatedEmployee,
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 // task route
 
-app.post("/api/tasks", async (req, res) => {
-  try {
-    const { employeeId, taskTitle, taskDescription, dueDate } = req.body;
+// app.post("/api/tasks", async (req, res) => {
+//   try {
+//     const { employeeId, taskTitle, taskDescription, dueDate } = req.body;
 
-    const employee = await Employee.findOne({ employeeId });
-    if (!employee) {
-      console.error(`❌ Employee not found with ID: ${employeeId}`);
-      return res.status(404).json({ error: "Employee not found" });
-    }
+//     const employee = await Employee.findOne({ employeeId });
+//     if (!employee) {
+//       console.error(`❌ Employee not found with ID: ${employeeId}`);
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
 
-    // ✅ Create the task
-    const newTask = new Task({
-      employeeId,
-      taskTitle,
-      taskDescription,
-      dueDate,
-      createdAt: new Date(),
-    });
+//     // ✅ Create the task
+//     const newTask = new Task({
+//       employeeId,
+//       taskTitle,
+//       taskDescription,
+//       dueDate,
+//       createdAt: new Date(),
+//     });
 
-    await newTask.save();
+//     await newTask.save();
 
-    const formattedDate = moment(newTask.createdAt).format('DD-MM-YYYY'); 
+//     const formattedDate = moment(newTask.createdAt).format('DD-MM-YYYY'); 
 
-    // ✅ Create an Admin Notification
-    const adminNotification = new Notification({
-      employeeId,
-      taskId: newTask._id,
-      message: ` You assigned a new task "${taskTitle}" to ${employee.name} on ${formattedDate}.`,
-      employeeName: employee.name,
-      type: 'admin',
-      createdAt: new Date(),
-      read: false,
-    });
+//     // ✅ Create an Admin Notification
+//     const adminNotification = new Notification({
+//       employeeId,
+//       taskId: newTask._id,
+//       message: ` You assigned a new task "${taskTitle}" to ${employee.name} on ${formattedDate}.`,
+//       employeeName: employee.name,
+//       type: 'admin',
+//       createdAt: new Date(),
+//       read: false,
+//     });
 
-    await adminNotification.save();
+//     await adminNotification.save();
 
-    // ✅ Create an Employee Notification (NEW Change)
-    console.log("🚀 Attempting to create Employee Notification...");
-    const employeeNotification = new Notification({
-      employeeId,
-      taskId: newTask._id,
-      message: `Task "${taskTitle}" is assigned to you on ${formattedDate}.`,
-      employeeName: employee.name,
-      type: 'employee', // ✅ Type for employee notification
-      createdAt: new Date(),
-      read: false,
-    });
+//     // ✅ Create an Employee Notification (NEW Change)
+//     console.log("🚀 Attempting to create Employee Notification...");
+//     const employeeNotification = new Notification({
+//       employeeId,
+//       taskId: newTask._id,
+//       message: `Task "${taskTitle}" is assigned to you on ${formattedDate}.`,
+//       employeeName: employee.name,
+//       type: 'employee', // ✅ Type for employee notification
+//       createdAt: new Date(),
+//       read: false,
+//     });
 
-    console.log("🚀 Created Employee Notification Object:", employeeNotification);
+//     console.log("🚀 Created Employee Notification Object:", employeeNotification);
 
-    await employeeNotification.save(); // ✅ SAVE TO DB
-    console.log("✅ Employee Notification Created in DB");
+//     await employeeNotification.save(); // ✅ SAVE TO DB
+//     console.log("✅ Employee Notification Created in DB");
 
-//     const io = req.app.get("io"); // 👈 Get socket instance
-// io.to(employeeId).emit("new-notification", employeeNotification); // 👈 Emit real-time update
+// //     const io = req.app.get("io"); // 👈 Get socket instance
+// // io.to(employeeId).emit("new-notification", employeeNotification); // 👈 Emit real-time update
 
-    res.status(201).json({
-      message: "Task assigned successfully",
-      task: newTask,
-    });
-  } catch (err) {
-    console.error("❌ Error assigning task:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+//     res.status(201).json({
+//       message: "Task assigned successfully",
+//       task: newTask,
+//     });
+//   } catch (err) {
+//     console.error("❌ Error assigning task:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
-// Update the route to use a query parameter
-app.get("/api/tasks", async (req, res) => {
-  try {
-    const { employeeId } = req.query; // Note: now using req.query
-    if (!employeeId) {
-      return res
-        .status(400)
-        .json({ error: "employeeId query parameter is required" });
-    }
-    const tasks = await Task.find({ employeeId });
-    if (!tasks || tasks.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "No tasks found for this employee" });
-    }
-    res.status(200).json(tasks);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// // Update the route to use a query parameter
+// app.get("/api/tasks", async (req, res) => {
+//   try {
+//     const { employeeId } = req.query; // Note: now using req.query
+//     if (!employeeId) {
+//       return res
+//         .status(400)
+//         .json({ error: "employeeId query parameter is required" });
+//     }
+//     const tasks = await Task.find({ employeeId });
+//     if (!tasks || tasks.length === 0) {
+//       return res
+//         .status(404)
+//         .json({ error: "No tasks found for this employee" });
+//     }
+//     res.status(200).json(tasks);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
-// PUT endpoint to update task status
-app.put("/api/tasks/:taskId", async (req, res) => {
-  try {
-    const { status, employeeId } = req.body;
-    const { taskId } = req.params;
+// // PUT endpoint to update task status
+// app.put("/api/tasks/:taskId", async (req, res) => {
+//   try {
+//     const { status, employeeId } = req.body;
+//     const { taskId } = req.params;
 
-    // ✅ Update Task Status
-    const task = await Task.findByIdAndUpdate(
-      taskId,
-      { status },
-      { new: true }
-    );
+//     // ✅ Update Task Status
+//     const task = await Task.findByIdAndUpdate(
+//       taskId,
+//       { status },
+//       { new: true }
+//     );
 
-    if (!task) {
-      return res.status(404).json({ error: "Task not found" });
-    }
+//     if (!task) {
+//       return res.status(404).json({ error: "Task not found" });
+//     }
 
-    // ✅ Fetch employeeName from Employee schema using employeeId
-    const employee = await Employee.findOne({ employeeId });
-    if (!employee) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
+//     // ✅ Fetch employeeName from Employee schema using employeeId
+//     const employee = await Employee.findOne({ employeeId });
+//     if (!employee) {
+//       return res.status(404).json({ error: "Employee not found" });
+//     }
 
-    // ✅ If status is changed to Completed – Notify Admin
-    if (status === "Completed") {
-      const completionNotification = new Notification({
-        employeeId,
-        taskId: task._id,
-        message: `Task "${task.taskTitle}" has been marked as completed by ${employee.name}.`,
-        employeeName: employee.name,
-        type: 'admin', // ✅ Notify Admin when task is completed
-        createdAt: new Date(),
-        read: false,
-      });
+//     // ✅ If status is changed to Completed – Notify Admin
+//     if (status === "Completed") {
+//       const completionNotification = new Notification({
+//         employeeId,
+//         taskId: task._id,
+//         message: `Task "${task.taskTitle}" has been marked as completed by ${employee.name}.`,
+//         employeeName: employee.name,
+//         type: 'admin', // ✅ Notify Admin when task is completed
+//         createdAt: new Date(),
+//         read: false,
+//       });
 
-      await completionNotification.save();
-//       const io = req.app.get("io");
-// io.to(employeeId).emit("new-notification", employeeNotification);
+//       await completionNotification.save();
+// //       const io = req.app.get("io");
+// // io.to(employeeId).emit("new-notification", employeeNotification);
 
-    }
+//     }
 
-    // ✅ Send Status Update Notification to Employee
-    const employeeNotification = new Notification({
-      employeeId,
-      taskId: task._id,
-      message: `Task "${task.taskTitle}" status has been updated to "${status}".`,
-      employeeName: employee.name,
-      type: 'employee', // ✅ Notify Employee about task status change
-      createdAt: new Date(),
-      read: false,
-    });
+//     // ✅ Send Status Update Notification to Employee
+//     const employeeNotification = new Notification({
+//       employeeId,
+//       taskId: task._id,
+//       message: `Task "${task.taskTitle}" status has been updated to "${status}".`,
+//       employeeName: employee.name,
+//       type: 'employee', // ✅ Notify Employee about task status change
+//       createdAt: new Date(),
+//       read: false,
+//     });
 
-    await employeeNotification.save();
-    console.log("✅ Employee Notification Saved:", employeeNotification); 
-    res.status(200).json({ task });
-  } catch (err) {
-    console.error("Error updating task status:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+//     await employeeNotification.save();
+//     console.log("✅ Employee Notification Saved:", employeeNotification); 
+//     res.status(200).json({ task });
+//   } catch (err) {
+//     console.error("Error updating task status:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 
 
 // ✅ GET endpoint for admin notifications
 
-app.get("/api/admin/notifications", async (req, res) => {
-  try {
-    // ✅ Filter only admin notifications
-    const notifications = await Notification.find({ type: 'admin' })
-      .sort({ createdAt: -1 })
-      .limit(20); // ✅ Limit to 20 recent notifications
+// app.get("/api/admin/notifications", async (req, res) => {
+//   try {
+//     // ✅ Filter only admin notifications
+//     const notifications = await Notification.find({ type: 'admin' })
+//       .sort({ createdAt: -1 })
+//       .limit(20); // ✅ Limit to 20 recent notifications
 
-    res.status(200).json(notifications);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-
-// ✅ GET endpoint for fetching employee notifications
-app.get("/api/notifications/employee", async (req, res) => {
-  try {
-    const { employeeId, limit = 20, page = 1, read } = req.query;
-
-    if (!employeeId) {
-      console.error("❌ Employee ID is required");
-      return res.status(400).json({ error: "Employee ID is required" });
-    }
-
-    console.log(`🔎 Fetching notifications for employeeId: ${employeeId}`);
-
-    let query = { 
-      employeeId, 
-      type: 'employee' 
-    };
-
-    if (read !== undefined) query.read = read === 'true';
-
-    const notifications = await Notification.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-
-    const totalNotifications = await Notification.countDocuments(query);
-
-    console.log("✅ Retrieved Notifications from DB:", notifications);
-
-    res.status(200).json({
-      notifications,
-      totalNotifications,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(totalNotifications / limit),
-    });
-  } catch (err) {
-    console.error("❌ Error fetching employee notifications:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ✅ GET unseen notifications for an employee
-app.get("/api/notifications/unseen", async (req, res) => {
-  try {
-    const { employeeId } = req.query;
-
-    if (!employeeId) {
-      return res.status(400).json({ error: "Employee ID is required" });
-    }
-
-    const unseenNotifications = await Notification.find({
-      employeeId,
-      type: "employee",
-      read: false,
-    }).sort({ createdAt: -1 });
-
-    res.status(200).json(unseenNotifications);
-  } catch (err) {
-    console.error("❌ Error fetching unseen notifications:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// ✅ PUT to mark all employee notifications as read
-app.put("/api/notifications/mark-seen", async (req, res) => {
-  try {
-    const { employeeId } = req.body;
-
-    if (!employeeId) {
-      return res.status(400).json({ error: "Employee ID is required" });
-    }
-
-    const result = await Notification.updateMany(
-      { employeeId, type: "employee", read: false },
-      { $set: { read: true } }
-    );
-
-    res.status(200).json({
-      message: "All unseen notifications marked as read",
-      modifiedCount: result.modifiedCount,
-    });
-  } catch (err) {
-    console.error("❌ Error marking notifications as seen:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+//     res.status(200).json(notifications);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 
 
+// // ✅ GET endpoint for fetching employee notifications
+// app.get("/api/notifications/employee", async (req, res) => {
+//   try {
+//     const { employeeId, limit = 20, page = 1, read } = req.query;
+
+//     if (!employeeId) {
+//       console.error("❌ Employee ID is required");
+//       return res.status(400).json({ error: "Employee ID is required" });
+//     }
+
+//     console.log(`🔎 Fetching notifications for employeeId: ${employeeId}`);
+
+//     let query = { 
+//       employeeId, 
+//       type: 'employee' 
+//     };
+
+//     if (read !== undefined) query.read = read === 'true';
+
+//     const notifications = await Notification.find(query)
+//       .sort({ createdAt: -1 })
+//       .skip((page - 1) * limit)
+//       .limit(parseInt(limit));
+
+//     const totalNotifications = await Notification.countDocuments(query);
+
+//     console.log("✅ Retrieved Notifications from DB:", notifications);
+
+//     res.status(200).json({
+//       notifications,
+//       totalNotifications,
+//       currentPage: parseInt(page),
+//       totalPages: Math.ceil(totalNotifications / limit),
+//     });
+//   } catch (err) {
+//     console.error("❌ Error fetching employee notifications:", err.message);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// // ✅ GET unseen notifications for an employee
+// app.get("/api/notifications/unseen", async (req, res) => {
+//   try {
+//     const { employeeId } = req.query;
+
+//     if (!employeeId) {
+//       return res.status(400).json({ error: "Employee ID is required" });
+//     }
+
+//     const unseenNotifications = await Notification.find({
+//       employeeId,
+//       type: "employee",
+//       read: false,
+//     }).sort({ createdAt: -1 });
+
+//     res.status(200).json(unseenNotifications);
+//   } catch (err) {
+//     console.error("❌ Error fetching unseen notifications:", err.message);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+
+// // ✅ PUT to mark all employee notifications as read
+// app.put("/api/notifications/mark-seen", async (req, res) => {
+//   try {
+//     const { employeeId } = req.body;
+
+//     if (!employeeId) {
+//       return res.status(400).json({ error: "Employee ID is required" });
+//     }
+
+//     const result = await Notification.updateMany(
+//       { employeeId, type: "employee", read: false },
+//       { $set: { read: true } }
+//     );
+
+//     res.status(200).json({
+//       message: "All unseen notifications marked as read",
+//       modifiedCount: result.modifiedCount,
+//     });
+//   } catch (err) {
+//     console.error("❌ Error marking notifications as seen:", err.message);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+
+////admin routes end points
 
 // app.post("/api/mark-notification-read", async (req, res) => {
 //   const { notificationId } = req.body;
@@ -1220,109 +1227,110 @@ const protectAdmin = (req, res, next) => {
   }
 };
 
-app.get("/get-report", async (req, res) => {
-  try {
-    const { sessionId } = req.query;
+//report get route
+// app.get("/get-report", async (req, res) => {
+//   try {
+//     const { sessionId } = req.query;
 
-    if (sessionId) {
-      console.log(`🔎 Fetching report with sessionId: ${sessionId}`);
+//     if (sessionId) {
+//       console.log(`🔎 Fetching report with sessionId: ${sessionId}`);
 
-      const report = await FormData.findOne({ sessionId: String(sessionId) });
+//       const report = await FormData.findOne({ sessionId: String(sessionId) });
 
-      if (!report) {
-        console.log(`❌ Report not found for sessionId: ${sessionId}`);
-        return res.status(404).json({
-          success: false,
-          message: "Report not found",
-        });
-      }
+//       if (!report) {
+//         console.log(`❌ Report not found for sessionId: ${sessionId}`);
+//         return res.status(404).json({
+//           success: false,
+//           message: "Report not found",
+//         });
+//       }
 
-      console.log("✅ Report fetched successfully:", report);
-      return res.status(200).json({
-        success: true,
-        data: report,
-      });
-    } else {
-      console.log("🔎 Fetching all reports...");
+//       console.log("✅ Report fetched successfully:", report);
+//       return res.status(200).json({
+//         success: true,
+//         data: report,
+//       });
+//     } else {
+//       console.log("🔎 Fetching all reports...");
 
-      const reports = await FormData.find();
+//       const reports = await FormData.find();
 
-      if (!reports.length) {
-        console.log("❌ No reports found");
-        return res.status(404).json({
-          success: false,
-          message: "No reports found",
-        });
-      }
+//       if (!reports.length) {
+//         console.log("❌ No reports found");
+//         return res.status(404).json({
+//           success: false,
+//           message: "No reports found",
+//         });
+//       }
 
-      console.log(`✅ Fetched ${reports.length} reports`);
-      return res.status(200).json({
-        success: true,
-        totalReports: reports.length,
-        data: reports,
-      });
-    }
-  } catch (error) {
-    console.error("🔥 Error in /get-report API:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-      error: error.message,
-    });
-  }
-});
+//       console.log(`✅ Fetched ${reports.length} reports`);
+//       return res.status(200).json({
+//         success: true,
+//         totalReports: reports.length,
+//         data: reports,
+//       });
+//     }
+//   } catch (error) {
+//     console.error("🔥 Error in /get-report API:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal Server Error",
+//       error: error.message,
+//     });
+//   }
+// });
 
-app.get("/get-report-data/:sessionId", async (req, res) => {
-  try {
-    const { sessionId } = req.params;
+// app.get("/get-report-data/:sessionId", async (req, res) => {
+//   try {
+//     const { sessionId } = req.params;
 
-    if (!sessionId) {
-      return res.status(400).json({ message: "Session ID is required" });
-    }
+//     if (!sessionId) {
+//       return res.status(400).json({ message: "Session ID is required" });
+//     }
 
-    const report = await FormData.findOne({ sessionId: String(sessionId) });
+//     const report = await FormData.findOne({ sessionId: String(sessionId) });
 
-    if (!report) {
-      return res.status(404).json({ message: "Report not found" });
-    }
+//     if (!report) {
+//       return res.status(404).json({ message: "Report not found" });
+//     }
 
-    res.status(200).json(report);
-  } catch (error) {
-    console.error("🔥 Error fetching report data:", error);
-    res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
-  }
-});
+//     res.status(200).json(report);
+//   } catch (error) {
+//     console.error("🔥 Error fetching report data:", error);
+//     res
+//       .status(500)
+//       .json({ message: "Internal Server Error", error: error.message });
+//   }
+// });
 
-app.delete("/delete-report/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+// app.delete("/delete-report/:id", async (req, res) => {
+//   try {
+//     const { id } = req.params;
 
-    const deletedReport = await FormData.findByIdAndDelete(id);
+//     const deletedReport = await FormData.findByIdAndDelete(id);
 
-    if (!deletedReport) {
-      console.log(`❌ Report with ID ${id} not found`);
-      return res.status(404).json({
-        success: false,
-        message: "Report not found",
-      });
-    }
+//     if (!deletedReport) {
+//       console.log(`❌ Report with ID ${id} not found`);
+//       return res.status(404).json({
+//         success: false,
+//         message: "Report not found",
+//       });
+//     }
 
-    console.log(`✅ Report with ID ${id} deleted successfully`);
-    return res.status(200).json({
-      success: true,
-      message: "Report deleted successfully",
-    });
-  } catch (error) {
-    console.error("🔥 Error deleting report:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete report",
-      error: error.message,
-    });
-  }
-});
+//     console.log(`✅ Report with ID ${id} deleted successfully`);
+//     return res.status(200).json({
+//       success: true,
+//       message: "Report deleted successfully",
+//     });
+//   } catch (error) {
+//     console.error("🔥 Error deleting report:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to delete report",
+//       error: error.message,
+//     });
+//   }
+// });
 
 //Bank Details
 // Create Schema and Model
