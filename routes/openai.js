@@ -215,7 +215,7 @@ Business Description: ${businessDescription} average DSCR : ${averageDSCR} Avera
 
   try {
 
-    // console.log("Prompt Sent to Gemini:", prompts[section]);
+     console.log("Prompt Sent to Gemini:", prompts[section]);
     const MODEL_NAME = "gemini-1.5-flash-latest";
     const chatHistory = [
       {
@@ -238,7 +238,7 @@ Business Description: ${businessDescription} average DSCR : ${averageDSCR} Avera
     });
 
     const result = await response.json();
-    // console.log("Gemini API Response:", result);
+     console.log("Gemini API Response:", result);
     if (
       result.candidates &&
       result.candidates.length > 0 &&
