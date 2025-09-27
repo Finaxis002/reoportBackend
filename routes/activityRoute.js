@@ -47,8 +47,7 @@ router.post("/activity/log", async (req, res) => {
 router.get("/activity/history", async (req, res) => {
   try {
     const activities = await Activity.find({})
-      .sort({ createdAt: -1 })
-      .limit(100);
+      .sort({ createdAt: -1 });
 
     res.json(activities);
   } catch (err) {
