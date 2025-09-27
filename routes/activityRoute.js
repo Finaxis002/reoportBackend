@@ -1,4 +1,4 @@
-// routes/activityRoute.js
+ // routes/activityRoute.js
 const express = require("express");
 const router = express.Router();
 const Activity = require("../models/Activity");
@@ -46,7 +46,17 @@ router.post("/activity/log", async (req, res) => {
 // ✅ GET /api/activity/history (no auth, but you can filter by role manually)
 router.get("/activity/history", async (req, res) => {
   try {
-    const activities = await Activity.find({})
+    const { startDate, endDate } = req.query;
+    let query = {};
+
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    const activities = await Activity.find(query)
       .sort({ createdAt: -1 });
 
     res.json(activities);
@@ -71,6 +81,13 @@ router.get("/activity/get-report-id", async (req, res) => {
   }
 });
 
-
+router.get('/total-count', async (req, res) => {
+  try {
+    const total = await Activity.countDocuments();
+    res.json({ total });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching total count' });
+  }
+});
 
 module.exports = router;
