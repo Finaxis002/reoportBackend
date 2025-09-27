@@ -81,6 +81,13 @@ router.get("/activity/get-report-id", async (req, res) => {
   }
 });
 
-
+router.get('/total-count', async (req, res) => {
+  try {
+    const total = await Activity.countDocuments();
+    res.json({ total });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching total count' });
+  }
+});
 
 module.exports = router;
