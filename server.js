@@ -34,6 +34,8 @@ const employeeRoutes = require("./routes/employeeRoute");
 const tasksRoutes = require("./routes/tasksRoute");
 const reportRoutes = require("./routes/reportRoutes");
 const notificationRoute = require("./routes/notificationRoute")
+const consultantRoutes = require('./routes/consultantRoutes');
+const consultantReportRoutes = require('./routes/consultantReportRoutes');
 
 const app = express();
 
@@ -58,6 +60,8 @@ app.use("/api/employees", employeeRoutes);
 app.use("/api/tasks", tasksRoutes);
 app.use("/get-report", reportRoutes);
 app.use('/api', notificationRoute);
+app.use('/api/consultants', consultantRoutes);
+app.use('/api/consultant-reports', consultantReportRoutes);
 
 
 // ✅ Debug: Print the environment variable
