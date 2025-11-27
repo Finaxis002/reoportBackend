@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Consultant = require('../models/Consultant');
+const ConsultantFormData = require('../models/consulatantFormData');
 const upload = require('../middleware/multerConfig');
 const path = require('path');
 const fs = require('fs');
@@ -45,8 +46,16 @@ router.get('/', async (req, res) => {
       total = await Consultant.countDocuments();
     }
 
+    // Add report count for each consultant
+    const consultantsWithCount = await Promise.all(
+      consultants.map(async (consultant) => {
+        const reportCount = await ConsultantFormData.countDocuments({ consultantId: consultant._id });
+        return { ...consultant.toObject(), reportCount };
+      })
+    );
+
     res.json({
-      consultants,
+      consultants: consultantsWithCount,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total
