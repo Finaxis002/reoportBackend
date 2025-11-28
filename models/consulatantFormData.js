@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const consultantFormSchema = new mongoose.Schema({
   sessionId: { type: String, required: true, unique: true },
-  consultantId: { type: String, required: true }, // Add consultantId
+  consultantId: { type: String, required: false }, // Add consultantId
   AccountInformation: Object,
   MeansOfFinance: Object,
   CostOfProject: Object,

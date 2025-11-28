@@ -85,6 +85,8 @@ router.post("/create-consultant-new-from-existing", upload.single("file"), async
   try {
     console.log("🔹 Incoming Request to /create-consultant-new-from-existing:", req.body);
 
+    const { consultantId } = req.body;
+
     if (!req.body.data) {
       return res.status(400).json({ message: "Missing data in request body" });
     }
@@ -133,7 +135,7 @@ router.post("/create-consultant-new-from-existing", upload.single("file"), async
     const newSessionId = require("uuid").v4();
     console.log("🆕 Creating a New Consultant Report with sessionId:", newSessionId);
 
-    const newForm = new ConsultantFormData({ sessionId: newSessionId, ...newData });
+    const newForm = new ConsultantFormData({ sessionId: newSessionId, consultantId, ...newData });
 
     await newForm.save();
     console.log("✅ New Consultant Document Saved Successfully:", newSessionId);
