@@ -10,6 +10,7 @@ const consultantFormSchema = new mongoose.Schema({
   Expenses: Object,
   Revenue: Object,
   MoreDetails: Object,
+  generatedPDF: Object,
   computedData: {
     type: Object,
     default: {},

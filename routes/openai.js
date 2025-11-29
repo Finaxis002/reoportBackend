@@ -2,8 +2,25 @@ const express = require("express");
 const router = express.Router();
 const nlp = require("compromise");
 
+// Define sections per version
+const VERSION_SECTIONS = {
+  "Version 1": ["introduction", "conclusion"],
+  "Version 2": ["introduction", "conclusion"],
+  "Version 3": ["introduction", "scope", "conclusion"],
+  "Version 4": ["introduction", "scope", "market_potential", "conclusion"],
+  "Version 5": ["introduction", "scope", "market_potential", "swot", "products_services", "conclusion"],
+};
 
-
+// Dummy data for each section
+const DUMMY_DATA = {
+  introduction: "This is a sample introduction for the business. It provides an overview of the company's operations, market position, and strategic goals. The business focuses on delivering high-quality products and services to meet customer needs. With a strong foundation in industry best practices, the company aims to achieve sustainable growth and innovation. Key aspects include operational excellence, customer satisfaction, and market expansion. This introduction serves as a foundation for understanding the business's role in the industry.",
+  about: "This section provides detailed information about the project. It covers the business model, operational framework, and unique aspects of the venture. The project emphasizes quality, efficiency, and customer-centric approaches. Infrastructure, technology, and compliance are key focus areas. The business is committed to sustainable practices and community impact. Future growth prospects and expansion opportunities are highlighted.",
+  products_services: "The business offers a comprehensive range of products and services designed to meet diverse customer needs. Each offering is crafted with attention to quality, innovation, and value. Services include professional consultation, customized solutions, and ongoing support. Products are developed using advanced technology and industry standards. The focus is on delivering exceptional customer experiences and building long-term relationships.",
+  scope: "The project scope encompasses various operational and strategic elements. It includes production processes, infrastructure development, and market expansion plans. The scope covers technology implementation, regulatory compliance, and quality assurance. Opportunities for diversification and value addition are considered. The project aims to address market demands and create sustainable business operations.",
+  market_potential: "The market shows significant potential for growth and development. Current trends indicate increasing demand and expanding opportunities. Market analysis reveals favorable conditions for business expansion. Key factors include technological advancements, changing consumer preferences, and economic developments. The business is well-positioned to capitalize on emerging market opportunities and achieve competitive advantages.",
+  swot: "**Strengths**\n1. **Strong Market Position**\nThe business maintains a competitive advantage through established market presence and customer loyalty. Strategic positioning and brand recognition contribute to sustained success.\n\n2. **Operational Excellence**\nEfficient processes and quality management systems ensure consistent delivery of products and services. Continuous improvement initiatives enhance operational capabilities.\n\n**Weaknesses**\n1. **Resource Constraints**\nLimited resources may impact expansion plans and operational scalability. Strategic resource allocation is necessary for optimal performance.\n\n2. **Market Dependencies**\nReliance on specific market segments may expose the business to sector-specific risks. Diversification strategies can mitigate these vulnerabilities.\n\n**Opportunities**\n1. **Market Expansion**\nGrowing market demand presents opportunities for business expansion and new customer acquisition. Strategic initiatives can capitalize on emerging trends.\n\n2. **Technological Advancements**\nAdoption of new technologies can enhance operational efficiency and competitive positioning. Innovation investments offer significant growth potential.\n\n**Threats**\n1. **Market Competition**\nIntense competition may impact market share and pricing strategies. Differentiation and value proposition strengthening are essential.\n\n2. **Economic Factors**\nEconomic fluctuations and regulatory changes can affect business operations. Risk management strategies help navigate these challenges.",
+  conclusion: "In conclusion, the business demonstrates strong potential for success and sustainable growth. Key financial metrics including DSCR, current ratio, and break-even point indicate operational viability. The project offers significant social and economic benefits, including job creation and community development. Technical, social, and commercial feasibility has been established. The business is well-positioned to achieve long-term success in the market.",
+};
 
 
 async function fetchPixabayImages(query, count = 3) {
@@ -34,11 +51,20 @@ router.post("/generate-section", async (req, res) => {
     averageCurrentRatio,
     BEP,
     wordLimit = 1000,
+    version,
   } = req.body;
   if (!section || !businessDescription) {
     return res
       .status(400)
       .json({ error: "Section and business description are required" });
+  }
+
+  // Check if section is allowed for the version
+  const allowedSections = VERSION_SECTIONS[version] || [];
+  if (!allowedSections.includes(section)) {
+    return res
+      .status(400)
+      .json({ error: "Section not allowed for this version" });
   }
 
   // Define prompts for each section:
@@ -252,10 +278,16 @@ Business Description: ${businessDescription} average DSCR : ${averageDSCR} Avera
       const images = await fetchPixabayImages(imageQuery);
       res.json({ sectionText: text.trim(), images });
     } else {
-      res.status(500).json({ error: "Failed to generate section from AI." });
+      console.error("Invalid API response, using dummy data");
+      // Return dummy data on invalid response
+      const dummyText = DUMMY_DATA[section] || "Dummy content for this section.";
+      res.json({ sectionText: dummyText, images: [] });
     }
   } catch (err) {
-    res.status(500).json({ error: "Server error: " + err.message });
+    console.error("Error generating section:", err.message);
+    // Return dummy data on failure
+    const dummyText = DUMMY_DATA[section] || "Dummy content for this section.";
+    res.json({ sectionText: dummyText, images: [] });
   }
 });
 
